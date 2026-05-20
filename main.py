@@ -9,6 +9,11 @@ Sections
   diffusion : print diffusion table across matrices and rounds
   stats     : print security statistics summary
   branch    : print branch numbers for all matrices
+  scenario  : run a named predefined attack scenario (use --list to see all)
+  prove     : formally prove or disprove security of a matrix
+  collapse  : show R_p partial rounds collapse to M^R_p on invariant subspace
+  differential : measure output difference bias (non-MDS = 100% predictable)
+  zerosum   : run zero-sum distinguisher over a coset of the invariant subspace
 
 Examples
 --------
@@ -18,6 +23,14 @@ Examples
   python main.py diffusion --r_p 10
   python main.py stats
   python main.py branch
+  python main.py scenario --list
+  python main.py scenario --name classic_invariant
+  python main.py scenario --name prove_all
+  python main.py prove --matrix identity
+  python main.py prove --matrix mds
+  python main.py collapse --matrix identity --r_p 6
+  python main.py differential --matrix identity --r_p 6 --delta 4
+  python main.py zerosum --matrix identity --r_p 6
 """
 
 import argparse
@@ -26,6 +39,11 @@ from poseidon.field import Fp
 from poseidon.permutation import PoseidonPermutation
 from poseidon.matrices import MATRIX_NAMES, branch_number
 from attacks.invariant_subspace import run_attack_demo, InvariantSubspaceAttack
+from attacks.scenarios import list_scenarios, run_scenario, SCENARIOS
+from attacks.security_proof import SecurityProver
+from attacks.linear_collapse import LinearCollapseAttack
+from attacks.differential import DifferentialDistinguisher
+from attacks.zero_sum import ZeroSumDistinguisher
 from analysis.diffusion import compare_matrices
 from analysis.statistics import compute_stats
 
@@ -198,6 +216,179 @@ def cmd_branch(args):
 
 
 # ---------------------------------------------------------------------------
+# Subcommand: scenario
+# ---------------------------------------------------------------------------
+
+def cmd_scenario(args):
+    if args.list:
+        by_cat = list_scenarios()
+        _print_separator("═")
+        print("PREDEFINED ATTACK SCENARIOS")
+        _print_separator("═")
+        for cat, scenarios in by_cat.items():
+            print(f"\n  [{cat.upper()}]")
+            for s in scenarios:
+                print(f"    {s['name']:30s}  {s['description']}")
+        _print_separator("═")
+        return
+
+    if not args.name:
+        print("Error: provide --name <scenario> or --list")
+        sys.exit(1)
+
+    _print_separator("═")
+    meta = SCENARIOS.get(args.name)
+    if not meta:
+        print(f"Unknown scenario '{args.name}'. Run with --list to see all.")
+        sys.exit(1)
+    print(f"SCENARIO: {args.name}")
+    print(f"  {meta['description']}")
+    _print_separator("═")
+    run_scenario(args.name, verbose=True)
+    _print_separator("═")
+
+
+# ---------------------------------------------------------------------------
+# Subcommand: prove
+# ---------------------------------------------------------------------------
+
+def cmd_prove(args):
+    _print_separator("═")
+    print(f"FORMAL SECURITY PROOF  —  matrix: {args.matrix}")
+    _print_separator("═")
+
+    prover = SecurityProver(t=args.t, matrix=args.matrix)
+    result = prover.prove_or_disprove()
+
+    print(f"\n  VERDICT: {result['verdict']}\n")
+    for step in result["proof_steps"]:
+        print(f"  {step}")
+
+    if result.get("counterexample"):
+        ce = result["counterexample"]
+        _print_separator()
+        print(f"  Counterexample  Δ_in = {ce['delta_in']}")
+        print(f"  Invariant subspace coordinates: {ce['invariant_subspace_coords']}")
+        print(f"  coord-0 ever nonzero across 6 rounds: {ce['coord0_ever_nonzero']}")
+        if args.trace:
+            print("\n  Round trace:")
+            for entry in ce["trace"]:
+                print(f"    round {entry['round']:2d}  diff={entry['diff']}  coord0={entry['coord0']}")
+
+    if args.scan:
+        _print_separator()
+        print("\n  Exhaustive difference scan (weight ≤ 2):")
+        scan = prover.exhaustive_difference_scan(max_weight=2)
+        print(f"  Checked: {scan['total_checked']} | Dangerous: {scan['dangerous_count']} | "
+              f"Safe: {scan['safe_count']} | Verdict: {scan['verdict']}")
+        if scan["dangerous"]:
+            print("  Dangerous diffs (M·Δ has coord-0 = 0):")
+            for d in scan["dangerous"][:5]:
+                print(f"    Δ={d['delta']}  M·Δ={d['image']}")
+
+    _print_separator("═")
+
+
+# ---------------------------------------------------------------------------
+# Subcommand: collapse
+# ---------------------------------------------------------------------------
+
+def cmd_collapse(args):
+    _print_separator("═")
+    print(f"LINEAR COLLAPSE ATTACK  —  matrix: {args.matrix}  r_p={args.r_p}")
+    _print_separator("═")
+
+    atk = LinearCollapseAttack(t=args.t, r_p=args.r_p, alpha=args.alpha, matrix=args.matrix)
+
+    print(f"\n  Effective map M^{args.r_p} (row 0):")
+    print(f"    {atk.show_effective_map()[0]}")
+    print(f"\n  Verifying {args.samples} random input pairs...")
+    result = atk.verify_collapse(delta_val=args.delta, n_samples=args.samples)
+    print(f"  Predicted diff: {result['predicted_diff']}")
+    print(f"  All samples match linear prediction: {result['all_correct']}")
+
+    for s in result["samples"]:
+        match = "OK" if s["correct"] else "MISMATCH"
+        print(f"    [{match}] input={[x for x in s['input'][:2]]}... "
+              f"actual={s['actual_diff'][:2]}... predicted={s['predicted_diff'][:2]}...")
+
+    if args.track:
+        _print_separator()
+        print(f"\n  M^r coord-0 behavior for r=1..{args.r_p}:")
+        track = atk.track_map_power(max_r=args.r_p)
+        for r, v in track.items():
+            status = "coord-0=0 (S-box dormant)" if v["coord0_zero"] else "coord-0≠0 (S-box engaged)"
+            print(f"    r={r:2d}  {status}  image(e_last)={v['image_of_e_last']}")
+
+    _print_separator("═")
+
+
+# ---------------------------------------------------------------------------
+# Subcommand: differential
+# ---------------------------------------------------------------------------
+
+def cmd_differential(args):
+    _print_separator("═")
+    print(f"DIFFERENTIAL DISTINGUISHER  —  matrix: {args.matrix}  r_p={args.r_p}")
+    _print_separator("═")
+
+    d = DifferentialDistinguisher(t=args.t, r_p=args.r_p, alpha=args.alpha, matrix=args.matrix)
+
+    print(f"\n  Measuring bias over {args.samples} random input pairs (δ={args.delta})...")
+    bias = d.measure_bias(delta_val=args.delta, n_samples=args.samples)
+    print(f"  Unique output diffs: {bias['unique_output_diffs']} / {bias['n_samples']}")
+    print(f"  Fully predictable  : {bias['fully_predictable']}")
+    print(f"  Predicted diff     : {list(bias['predicted_diff'])[:3]}")
+    print(f"  Sample diffs (first 3):")
+    for i, diff in enumerate(bias["sample_diffs"][:3]):
+        print(f"    [{i}] {diff}")
+
+    if args.table:
+        _print_separator()
+        print(f"\n  Differential probability table:")
+        tbl = d.differential_probability_table()
+        header = f"  {'Δ_in':25s} {'unique_out':>10} {'det?':>6} {'coord0_in_Δ':>12}"
+        print(header)
+        _print_separator()
+        for row in tbl["table"]:
+            print(f"  {str(row['delta_in']):25s} {row['unique_out_diffs']:>10} "
+                  f"{'YES' if row['is_deterministic'] else 'no':>6} "
+                  f"{'YES' if row['coord0_in_delta'] else 'no':>12}")
+
+    _print_separator("═")
+
+
+# ---------------------------------------------------------------------------
+# Subcommand: zerosum
+# ---------------------------------------------------------------------------
+
+def cmd_zerosum(args):
+    _print_separator("═")
+    print(f"ZERO-SUM DISTINGUISHER  —  matrix: {args.matrix}  r_p={args.r_p}")
+    _print_separator("═")
+
+    z = ZeroSumDistinguisher(
+        t=args.t, r_p=args.r_p, alpha=args.alpha, matrix=args.matrix, r_f=args.r_f
+    )
+    base = [Fp(1), Fp(2), Fp(3)]
+
+    print(f"\n  Coset sum over {args.coset_size} elements of V = {{(0,0,x)}}:")
+    result = z.check_coset_sum(base=base, coset_size=args.coset_size)
+    print(f"  All coord-0 outputs equal : {result['all_coord0_equal']}")
+    print(f"  coord-0 values            : {result['coord0_values']}")
+
+    if args.trials > 0:
+        _print_separator()
+        print(f"\n  Running {args.trials} random-base trials...")
+        r = z.run_distinguisher(n_trials=args.trials)
+        print(f"  All trials trivially distinguishable: {r['all_trials_trivially_distinguishable']}")
+        for t_ in r["trials"]:
+            print(f"    trial {t_['trial']}: unique coord-0 values = {t_['unique_coord0_values']}")
+
+    _print_separator("═")
+
+
+# ---------------------------------------------------------------------------
 # Main parser
 # ---------------------------------------------------------------------------
 
@@ -248,6 +439,59 @@ def build_parser():
     # branch
     p_br = sub.add_parser("branch", parents=[shared], help="Print branch numbers")
     p_br.set_defaults(func=cmd_branch)
+
+    # scenario
+    p_sc = sub.add_parser("scenario", parents=[shared],
+                           help="Run a predefined attack scenario")
+    p_sc.add_argument("--name", type=str, default=None,
+                      help="Scenario name to run")
+    p_sc.add_argument("--list", action="store_true",
+                      help="List all available scenarios")
+    p_sc.set_defaults(func=cmd_scenario)
+
+    # prove
+    p_pv = sub.add_parser("prove", parents=[shared],
+                           help="Formally prove or disprove security of a matrix")
+    p_pv.add_argument("--matrix", choices=list(MATRIX_NAMES), default="mds",
+                      help="Matrix to analyze")
+    p_pv.add_argument("--scan",  action="store_true",
+                      help="Also run exhaustive difference scan (weight ≤ 2)")
+    p_pv.add_argument("--trace", action="store_true",
+                      help="Print per-round counterexample trace")
+    p_pv.set_defaults(func=cmd_prove)
+
+    # collapse
+    p_cl = sub.add_parser("collapse", parents=[shared],
+                           help="Show partial rounds collapse to M^R_p on invariant subspace")
+    p_cl.add_argument("--matrix",  choices=list(MATRIX_NAMES), default="identity",
+                      help="Matrix for partial rounds")
+    p_cl.add_argument("--samples", type=int, default=5,
+                      help="Number of random input pairs to verify")
+    p_cl.add_argument("--track",   action="store_true",
+                      help="Track M^r coord-0 behavior for each r")
+    p_cl.set_defaults(func=cmd_collapse)
+
+    # differential
+    p_df = sub.add_parser("differential", parents=[shared],
+                           help="Measure output difference bias (non-MDS = 100% predictable)")
+    p_df.add_argument("--matrix",  choices=list(MATRIX_NAMES), default="identity",
+                      help="Matrix for partial rounds")
+    p_df.add_argument("--samples", type=int, default=20,
+                      help="Number of random input pairs")
+    p_df.add_argument("--table",   action="store_true",
+                      help="Print full differential probability table")
+    p_df.set_defaults(func=cmd_differential)
+
+    # zerosum
+    p_zs = sub.add_parser("zerosum", parents=[shared],
+                           help="Run zero-sum distinguisher over coset of invariant subspace")
+    p_zs.add_argument("--matrix",     choices=list(MATRIX_NAMES), default="identity",
+                      help="Matrix for partial rounds")
+    p_zs.add_argument("--coset-size", type=int, default=6, dest="coset_size",
+                      help="Number of coset elements to sum")
+    p_zs.add_argument("--trials",     type=int, default=3,
+                      help="Number of random-base trials (0 to skip)")
+    p_zs.set_defaults(func=cmd_zerosum, r_f=0)  # default partial-only for clear distinction
 
     return parser
 
