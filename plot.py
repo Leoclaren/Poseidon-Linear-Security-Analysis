@@ -83,24 +83,33 @@ def plot_degree(t=3, r_p=10, alpha=5, matrices=None, save=None):
         matrices = KNOWN_MATRICES
     data = compare_matrices_degree(matrix_names=matrices, t=t, r_p=r_p, alpha=alpha)
 
+    styles = {
+        "mds":       dict(linestyle='-',  marker='o', linewidth=2.8, markersize=7, zorder=10),
+        "identity":  dict(linestyle='--', marker='s', linewidth=2.2, markersize=6, zorder=5),
+        "circulant": dict(linestyle='-.', marker='^', linewidth=2.2, markersize=6, zorder=6),
+        "poseidon2": dict(linestyle=':',  marker='D', linewidth=2.5, markersize=6, zorder=7),
+    }
+
     fig, ax = plt.subplots(figsize=(9, 5))
     for name, history in data.items():
         rounds = [h[0] for h in history]
-        maxdeg = [h[2] for h in history]
+        maxdeg = [max(h[2], 0.8) for h in history]  
         color = COLORS.get(name, None)
         label = LABELS.get(name, name)
-        ax.plot(rounds, maxdeg, marker='o', linewidth=2, color=color, label=label)
+        style = styles.get(name, {})
+        ax.plot(rounds, maxdeg, color=color, label=label, **style)
 
+    ax.set_yscale('log')
     ax.set_xlabel('Round', fontsize=12)
-    ax.set_ylabel('Max algebraic degree (upper bound)', fontsize=12)
+    ax.set_ylabel('Max algebraic degree\n(upper bound, log scale)', fontsize=12)
     ax.set_title(f'Algebraic degree growth over partial rounds  |  t={t}, α={alpha}', fontsize=13)
     ax.set_xticks(range(r_p + 1))
-    ax.legend(fontsize=10)
-    ax.grid(True, alpha=0.3)
+    ax.legend(fontsize=10, loc='upper left')
+    ax.grid(True, which='both', alpha=0.3)
 
     fig.tight_layout()
     if save:
-        fig.savefig(save, dpi=150)
+        fig.savefig(save, dpi=300, bbox_inches='tight')
         print(f"Saved: {save}")
     else:
         plt.show()

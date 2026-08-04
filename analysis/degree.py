@@ -22,40 +22,45 @@ from poseidon.permutation import PoseidonPermutation
 from poseidon.matrices import get_matrix, MATRIX_NAMES
 
 
-def track_algebraic_degree(matrix_name: str, t: int = 3, r_p: int = 10, alpha: int = 5):
-    """Track algebraic-degree upper bounds for partial rounds.
-
-    Returns a list of tuples: (round_index, degree_vector, max_degree)
-    where round_index runs from 0 (initial) to r_p.
+def track_algebraic_degree(matrix_name: str, t: int = 3, r_p: int = 10, alpha: int = 5,
+                           initial_support=None):
     """
-    # Build a PoseidonPermutation to reuse matrix selection logic; but fall
-    # back to get_matrix if permutation doesn't expose the chosen matrix.
-    perm = PoseidonPermutation(t=t, r_f=0, r_p=r_p, alpha=alpha, matrix=matrix_name)
-    try:
-        M = perm.partial_matrix
-    except Exception:
-        M = get_matrix(matrix_name, t)
+    Track algebraic-degree upper bounds for partial rounds,
+    respecting possible invariant subspaces.
 
-    # degrees: start as 1 (each output is linear in its own input)
-    deg = [1] * t
-    history = [(0, list(deg), max(deg))]
+    initial_support: list/tuple of length t indicating which coordinates
+                     start with non-zero difference (default: last coordinate only,
+                     matching the Δ = (0,...,0,δ) used in the paper).
+    """
+    from poseidon.matrices import get_matrix
+
+    M = get_matrix(matrix_name, t)
+
+    # Default: difference only on the last coordinate (as in the paper experiments)
+    if initial_support is None:
+        initial_support = [0] * (t - 1) + [1]
+
+    # degree[i] = current upper bound on algebraic degree of coordinate i
+    deg = [1 if s else 0 for s in initial_support]
+    history = [(0, list(deg), max(deg) if any(deg) else 0)]
 
     for r in range(1, r_p + 1):
-        # S-box on coord 0 increases degree multiplicatively
-        deg[0] = deg[0] * alpha
+        # S-box only increases degree if coord 0 currently has non-zero degree
+        # (i.e., the differential can be non-zero there)
+        if deg[0] > 0:
+            deg[0] = deg[0] * alpha
 
-        # Apply linear layer: new_deg[i] = max_j deg[j] where M[i][j] != 0
+        # Linear layer: new_deg[i] = max of deg[j] over support of row i
         new_deg = []
         for i in range(t):
             maxdeg = 0
             for j in range(t):
-                if int(M[i][j]) != 0:
-                    if deg[j] > maxdeg:
-                        maxdeg = deg[j]
+                if int(M[i][j]) != 0 and deg[j] > maxdeg:
+                    maxdeg = deg[j]
             new_deg.append(maxdeg)
 
         deg = new_deg
-        history.append((r, list(deg), max(deg)))
+        history.append((r, list(deg), max(deg) if any(deg) else 0))
 
     return history
 
