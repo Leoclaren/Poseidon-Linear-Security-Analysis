@@ -34,6 +34,9 @@ LABELS = {
     "poseidon2": "Poseidon2-like (sparse)",
 }
 
+# Known matrix names to compare (keeps plotting consistent for any t)
+KNOWN_MATRICES = ["mds", "identity", "circulant", "poseidon2"]
+
 
 # ---------------------------------------------------------------------------
 # Plot 1: Diffusion coefficient over rounds
@@ -77,7 +80,7 @@ def plot_diffusion(t=3, r_p=10, alpha=5, delta_val=4, matrices=None, save=None):
 
 def plot_degree(t=3, r_p=10, alpha=5, matrices=None, save=None):
     if matrices is None:
-        matrices = list(MATRIX_NAMES.keys()) + ["poseidon2"]
+        matrices = KNOWN_MATRICES
     data = compare_matrices_degree(matrix_names=matrices, t=t, r_p=r_p, alpha=alpha)
 
     fig, ax = plt.subplots(figsize=(9, 5))
@@ -108,11 +111,16 @@ def plot_degree(t=3, r_p=10, alpha=5, matrices=None, save=None):
 # ---------------------------------------------------------------------------
 
 def plot_branch_numbers(t=3, save=None):
-    names = list(MATRIX_NAMES.keys())
-    # include poseidon2 label for plotting even if not in MATRIX_NAMES
-    if 'poseidon2' not in names:
-        names.append('poseidon2')
-    bns   = [branch_number(MATRIX_NAMES[n]) if n in MATRIX_NAMES else None for n in names]
+    names = KNOWN_MATRICES.copy()
+    bns = []
+    for n in names:
+        try:
+            M = get_matrix(n, t)
+            bn = branch_number(M)
+        except Exception:
+            bn = None
+        bns.append(bn)
+
     threshold = t + 1
 
     fig, ax = plt.subplots(figsize=(7, 4))
@@ -241,9 +249,15 @@ def plot_all(t=3, r_p=10, alpha=5, delta_val=4, save=None):
 
     # --- subplot 2: branch numbers ---
     ax2 = fig.add_subplot(2, 2, 2)
-    names = list(MATRIX_NAMES.keys())
-    bns   = [branch_number(MATRIX_NAMES[n]) for n in names]
-    ax2.bar([n for n in names], bns, color=[COLORS.get(n) for n in names],
+    names = KNOWN_MATRICES.copy()
+    bns = []
+    for n in names:
+        try:
+            M = get_matrix(n, t)
+            bns.append(branch_number(M))
+        except Exception:
+            bns.append(0)
+    ax2.bar([LABELS.get(n, n) for n in names], bns, color=[COLORS.get(n) for n in names],
             edgecolor="black", linewidth=0.8)
     ax2.axhline(t + 1, color="steelblue", linestyle="--", linewidth=2,
                 label=f"MDS threshold = {t+1}")
@@ -255,8 +269,8 @@ def plot_all(t=3, r_p=10, alpha=5, delta_val=4, save=None):
 
     # --- subplot 3: final diffusion bar ---
     ax3 = fig.add_subplot(2, 2, 3)
-    final_d = [stats[n]["final_diffusion"] for n in names]
-    ax3.bar(names, final_d, color=[COLORS.get(n) for n in names],
+    final_d = [stats.get(n, {}).get("final_diffusion", 0.0) for n in names]
+    ax3.bar([LABELS.get(n, n) for n in names], final_d, color=[COLORS.get(n) for n in names],
             edgecolor="black", linewidth=0.8)
     ax3.axhline(1.0, color="gray", linestyle="--", linewidth=1)
     ax3.set_title(f"Final diffusion after {r_p} partial rounds")
@@ -270,20 +284,21 @@ def plot_all(t=3, r_p=10, alpha=5, delta_val=4, save=None):
     ax4.axis("off")
     rows = []
     for n in names:
-        s = stats[n]
+        s = stats.get(n, {})
         rows.append([
             n,
-            str(s["branch_number"]),
-            "MDS" if s["is_mds"] else "non-MDS",
-            "Never" if s["rounds_to_full_diffusion"] is None else str(s["rounds_to_full_diffusion"]),
-            "VULN" if s["vulnerable"] else "OK",
+            str(s.get("branch_number", "n/a")),
+            "MDS" if s.get("is_mds") else "non-MDS",
+            "Never" if s.get("rounds_to_full_diffusion") is None else str(s.get("rounds_to_full_diffusion")),
+            "VULN" if s.get("vulnerable") else "OK",
         ])
     colors_table = []
     for n in names:
-        vuln = stats[n]["vulnerable"]
+        s = stats.get(n, {})
+        vuln = s.get("vulnerable", False)
         colors_table.append(
-            [COLORS.get(n, 'white'), "white", "#fadbd8" if not stats[n]["is_mds"] else "#d5f5e3",
-             "#fadbd8" if stats[n]["rounds_to_full_diffusion"] is None else "#d5f5e3",
+            [COLORS.get(n, 'white'), "white", "#fadbd8" if not s.get("is_mds") else "#d5f5e3",
+             "#fadbd8" if s.get("rounds_to_full_diffusion") is None else "#d5f5e3",
              "#fadbd8" if vuln else "#d5f5e3"]
         )
     tbl = ax4.table(
