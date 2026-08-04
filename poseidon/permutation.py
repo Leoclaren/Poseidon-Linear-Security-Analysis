@@ -7,7 +7,7 @@ Round structure:
 """
 
 from .field import Fp
-from .matrices import matrix_mul, MATRIX_NAMES, MDS_MATRIX, get_matrix, identity_matrix
+from .matrices import matrix_mul, get_matrix, identity_matrix
 from .constants import round_constants
 
 
@@ -45,7 +45,10 @@ class PoseidonPermutation:
             self.full_matrix = full_matrix
         else:
             try:
-                self.full_matrix = MDS_MATRIX if t == 3 else get_matrix('mds', t)
+                # Always ask the matrix module for an 'mds' matrix of size t.
+                # For t==3 this returns the fixed example; for larger t it runs
+                # the finder (randomized search) and returns a suitable matrix.
+                self.full_matrix = get_matrix('mds', t)
             except Exception:
                 # fallback to identity of size t to avoid size mismatches
                 self.full_matrix = identity_matrix(t)
@@ -57,11 +60,13 @@ class PoseidonPermutation:
             try:
                 self.partial_matrix = get_matrix(matrix, t)
             except Exception:
-                # backward compatibility: try the legacy MATRIX_NAMES which are t=3
-                if matrix in MATRIX_NAMES:
-                    self.partial_matrix = MATRIX_NAMES[matrix]
+                # Backwards-compatibility: allow passing an explicit matrix object
+                if isinstance(matrix, list):
+                    self.partial_matrix = matrix
                 else:
-                    raise ValueError(f"Unknown matrix: {matrix}. Choose from {list(MATRIX_NAMES)} or provide a t-sized matrix")
+                    raise ValueError(
+                        f"Unknown matrix: {matrix}. Choose from 'mds','identity','circulant','poseidon2' or provide a t-sized matrix"
+                    )
 
         self.matrix_name = matrix
         self.constants = round_constants(t, r_f, r_p)
