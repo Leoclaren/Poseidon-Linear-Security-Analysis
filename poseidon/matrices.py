@@ -22,6 +22,9 @@ MDS_MATRIX_T3 = [
     [Fp(17), Fp(19), Fp(23)],
 ]
 
+# Backwards-compatible alias expected by other modules
+MDS_MATRIX = MDS_MATRIX_T3
+
 # --- Utilities ---------------------------------------------------------------
 
 def matrix_mul(M, state):
