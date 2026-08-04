@@ -29,10 +29,27 @@ class Fp(int):
         return Fp(int(other) * int(self))
 
     def __pow__(self, exp, mod=None):
+        # modular exponentiation
         return Fp(pow(int(self), int(exp), P))
 
     def __neg__(self):
         return Fp(P - int(self))
+
+    def __truediv__(self, other):
+        # multiply by modular inverse of other
+        o = int(other)
+        if o % P == 0:
+            raise ZeroDivisionError("division by zero in Fp")
+        inv = pow(o, P - 2, P)
+        return Fp((int(self) * inv) % P)
+
+    def __rtruediv__(self, other):
+        # other / self
+        s = int(self)
+        if s % P == 0:
+            raise ZeroDivisionError("division by zero in Fp")
+        inv = pow(s, P - 2, P)
+        return Fp((int(other) * inv) % P)
 
     def __repr__(self):
         return f"Fp({int(self)})"
