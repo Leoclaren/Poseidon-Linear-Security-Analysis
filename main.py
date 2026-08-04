@@ -37,7 +37,7 @@ import argparse
 import sys
 from poseidon.field import Fp
 from poseidon.permutation import PoseidonPermutation
-from poseidon.matrices import MATRIX_NAMES, branch_number
+from poseidon.matrices import get_matrix, branch_number
 from attacks.invariant_subspace import run_attack_demo, InvariantSubspaceAttack
 from attacks.scenarios import list_scenarios, run_scenario, SCENARIOS
 from attacks.security_proof import SecurityProver
@@ -46,6 +46,8 @@ from attacks.differential import DifferentialDistinguisher
 from attacks.zero_sum import ZeroSumDistinguisher
 from analysis.diffusion import compare_matrices
 from analysis.statistics import compute_stats
+
+MATRIX_CHOICES = ["mds", "identity", "circulant", "poseidon2"]
 
 
 # ---------------------------------------------------------------------------
@@ -154,7 +156,6 @@ def cmd_diffusion(args):
         delta_coord=-1, delta_val=args.delta,
     )
 
-    # Header
     names = list(data.keys())
     header = f"{'Round':>7}  " + "  ".join(f"{n:>15}" for n in names)
     print(header)
@@ -206,7 +207,8 @@ def cmd_branch(args):
     print(f"  t={args.t}  |  MDS threshold = t+1 = {args.t + 1}")
     print()
 
-    for name, M in MATRIX_NAMES.items():
+    for name in MATRIX_CHOICES:
+        M = get_matrix(name, args.t)
         bn = branch_number(M)
         is_mds = bn >= args.t + 1
         marker = "[MDS]    " if is_mds else "[non-MDS]"
@@ -370,9 +372,9 @@ def cmd_zerosum(args):
     z = ZeroSumDistinguisher(
         t=args.t, r_p=args.r_p, alpha=args.alpha, matrix=args.matrix, r_f=args.r_f
     )
-    base = [Fp(1), Fp(2), Fp(3)]
 
-    print(f"\n  Coset sum over {args.coset_size} elements of V = {{(0,0,x)}}:")
+    base = [Fp(i + 1) for i in range(args.t)]
+    print(f"\n  Coset sum over {args.coset_size} elements of V:")
     result = z.check_coset_sum(base=base, coset_size=args.coset_size)
     print(f"  All coord-0 outputs equal : {result['all_coord0_equal']}")
     print(f"  coord-0 values            : {result['coord0_values']}")
@@ -400,7 +402,6 @@ def build_parser():
         epilog=__doc__,
     )
 
-    # Shared args
     shared = argparse.ArgumentParser(add_help=False)
     shared.add_argument("--t",     type=int, default=3,  help="State width (default 3)")
     shared.add_argument("--r_f",   type=int, default=8,  help="Full rounds (default 8)")
@@ -412,13 +413,13 @@ def build_parser():
 
     # permute
     p_perm = sub.add_parser("permute", parents=[shared], help="Run Poseidon1 permutation")
-    p_perm.add_argument("--input",        nargs="+", type=int, default=[1, 2, 3],
+    p_perm.add_argument("--input", nargs="+", type=int, default=[1, 2, 3],
                         help="Input state (space-separated integers)")
-    p_perm.add_argument("--matrix",       choices=list(MATRIX_NAMES), default="mds",
+    p_perm.add_argument("--matrix", choices=MATRIX_CHOICES, default="mds",
                         help="Matrix for partial rounds")
     p_perm.add_argument("--partial-only", action="store_true",
                         help="Only run partial rounds (no full rounds)")
-    p_perm.add_argument("--trace",        action="store_true",
+    p_perm.add_argument("--trace", action="store_true",
                         help="Print round-by-round trace")
     p_perm.set_defaults(func=cmd_permute)
 
@@ -442,19 +443,17 @@ def build_parser():
 
     # scenario
     p_sc = sub.add_parser("scenario", parents=[shared],
-                           help="Run a predefined attack scenario")
-    p_sc.add_argument("--name", type=str, default=None,
-                      help="Scenario name to run")
-    p_sc.add_argument("--list", action="store_true",
-                      help="List all available scenarios")
+                          help="Run a predefined attack scenario")
+    p_sc.add_argument("--name", type=str, default=None, help="Scenario name to run")
+    p_sc.add_argument("--list", action="store_true", help="List all available scenarios")
     p_sc.set_defaults(func=cmd_scenario)
 
     # prove
     p_pv = sub.add_parser("prove", parents=[shared],
-                           help="Formally prove or disprove security of a matrix")
-    p_pv.add_argument("--matrix", choices=list(MATRIX_NAMES), default="mds",
+                          help="Formally prove or disprove security of a matrix")
+    p_pv.add_argument("--matrix", choices=MATRIX_CHOICES, default="mds",
                       help="Matrix to analyze")
-    p_pv.add_argument("--scan",  action="store_true",
+    p_pv.add_argument("--scan", action="store_true",
                       help="Also run exhaustive difference scan (weight ≤ 2)")
     p_pv.add_argument("--trace", action="store_true",
                       help="Print per-round counterexample trace")
@@ -462,36 +461,36 @@ def build_parser():
 
     # collapse
     p_cl = sub.add_parser("collapse", parents=[shared],
-                           help="Show partial rounds collapse to M^R_p on invariant subspace")
-    p_cl.add_argument("--matrix",  choices=list(MATRIX_NAMES), default="identity",
+                          help="Show partial rounds collapse to M^R_p on invariant subspace")
+    p_cl.add_argument("--matrix", choices=MATRIX_CHOICES, default="identity",
                       help="Matrix for partial rounds")
     p_cl.add_argument("--samples", type=int, default=5,
                       help="Number of random input pairs to verify")
-    p_cl.add_argument("--track",   action="store_true",
+    p_cl.add_argument("--track", action="store_true",
                       help="Track M^r coord-0 behavior for each r")
     p_cl.set_defaults(func=cmd_collapse)
 
     # differential
     p_df = sub.add_parser("differential", parents=[shared],
-                           help="Measure output difference bias (non-MDS = 100% predictable)")
-    p_df.add_argument("--matrix",  choices=list(MATRIX_NAMES), default="identity",
+                          help="Measure output difference bias (non-MDS = 100% predictable)")
+    p_df.add_argument("--matrix", choices=MATRIX_CHOICES, default="identity",
                       help="Matrix for partial rounds")
     p_df.add_argument("--samples", type=int, default=20,
                       help="Number of random input pairs")
-    p_df.add_argument("--table",   action="store_true",
+    p_df.add_argument("--table", action="store_true",
                       help="Print full differential probability table")
     p_df.set_defaults(func=cmd_differential)
 
     # zerosum
     p_zs = sub.add_parser("zerosum", parents=[shared],
-                           help="Run zero-sum distinguisher over coset of invariant subspace")
-    p_zs.add_argument("--matrix",     choices=list(MATRIX_NAMES), default="identity",
+                          help="Run zero-sum distinguisher over coset of invariant subspace")
+    p_zs.add_argument("--matrix", choices=MATRIX_CHOICES, default="identity",
                       help="Matrix for partial rounds")
     p_zs.add_argument("--coset-size", type=int, default=6, dest="coset_size",
                       help="Number of coset elements to sum")
-    p_zs.add_argument("--trials",     type=int, default=3,
+    p_zs.add_argument("--trials", type=int, default=3,
                       help="Number of random-base trials (0 to skip)")
-    p_zs.set_defaults(func=cmd_zerosum, r_f=0)  # default partial-only for clear distinction
+    p_zs.set_defaults(func=cmd_zerosum, r_f=0)
 
     return parser
 

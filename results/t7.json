@@ -1,0 +1,10 @@
+{
+  "t": 7,
+  "r_p": 6,
+  "alpha": 5,
+  "mds_error": "No module named 'poseidon'",
+  "identity_error": "name 'get_matrix' is not defined",
+  "circulant_error": "name 'get_matrix' is not defined",
+  "invariant_attack_error": "No module named 'attacks'",
+  "stats_error": "No module named 'analysis'"
+}

@@ -10,7 +10,7 @@ rounds then collapse to a purely linear map — no nonlinear security.
 
 from poseidon.field import Fp
 from poseidon.permutation import PoseidonPermutation
-from poseidon.matrices import matrix_mul, weight, branch_number, MATRIX_NAMES
+from poseidon.matrices import matrix_mul, weight, branch_number, get_matrix
 
 
 class InvariantSubspaceAttack:
@@ -27,7 +27,7 @@ class InvariantSubspaceAttack:
         self.r_p = r_p
         self.alpha = alpha
         self.matrix_name = matrix
-        self.M = MATRIX_NAMES[matrix]
+        self.M = get_matrix(matrix, t)
         self.perm = PoseidonPermutation(t=t, r_f=0, r_p=r_p, alpha=alpha, matrix=matrix)
 
     def check_invariant_subspace(self, delta_val: int = 4) -> dict:
@@ -111,9 +111,10 @@ def run_attack_demo(t: int = 3, r_p: int = 6, alpha: int = 5, delta_val: int = 4
     for name in ["mds", "identity", "circulant"]:
         atk = InvariantSubspaceAttack(t=t, r_p=r_p, alpha=alpha, matrix=name)
         subspace_result = atk.check_invariant_subspace(delta_val=delta_val)
-        prediction_result = atk.attack_predict_output_diff(
-            [Fp(1), Fp(2), Fp(3)], delta_val=delta_val
-        )
+
+        input_a = [Fp(i + 1) for i in range(t)]
+        prediction_result = atk.attack_predict_output_diff(input_a, delta_val=delta_val)
+
         results[name] = {
             "subspace": subspace_result,
             "prediction": prediction_result,
