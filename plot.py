@@ -79,17 +79,38 @@ def plot_diffusion(t=3, r_p=10, alpha=5, delta_val=4, matrices=None, save=None):
 # ---------------------------------------------------------------------------
 
 def plot_degree(t=3, r_p=10, alpha=5, matrices=None, save=None):
+    """
+    Plot algebraic degree upper bounds for several matrices with distinct styles
+    so overlapping/identical traces remain visible.
+    """
     if matrices is None:
         matrices = KNOWN_MATRICES
     data = compare_matrices_degree(matrix_names=matrices, t=t, r_p=r_p, alpha=alpha)
 
     fig, ax = plt.subplots(figsize=(9, 5))
-    for name, history in data.items():
+
+    # Define distinct markers and linestyles for clarity
+    markers = ['o', 's', '^', 'd', 'v', 'P', '*']
+    linestyles = ['-', '--', ':', '-.', '-', '--']
+
+    plotted = 0
+    for idx, name in enumerate(matrices):
+        history = data.get(name)
+        if not history:
+            continue
         rounds = [h[0] for h in history]
         maxdeg = [h[2] for h in history]
         color = COLORS.get(name, None)
         label = LABELS.get(name, name)
-        ax.plot(rounds, maxdeg, marker='o', linewidth=2, color=color, label=label)
+        m = markers[idx % len(markers)]
+        ls = linestyles[idx % len(linestyles)]
+        # plot line and markers; use slightly transparent lines so overlaps show
+        ax.plot(rounds, maxdeg, marker=m, linestyle=ls, linewidth=2, markersize=6,
+                color=color, label=label, alpha=0.9, zorder=10-idx)
+        plotted += 1
+
+    if plotted == 0:
+        ax.text(0.5, 0.5, 'No degree data to plot', ha='center', va='center')
 
     ax.set_xlabel('Round', fontsize=12)
     ax.set_ylabel('Max algebraic degree (upper bound)', fontsize=12)
