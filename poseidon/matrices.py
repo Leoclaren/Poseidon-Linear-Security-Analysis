@@ -6,10 +6,17 @@ in experiments). It provides helper generators for:
   - identity matrix
   - circulant non-MDS
   - a Poseidon2-like sparse matrix (one dense column / row)
+  - Cauchy-based deterministic MDS matrices for t=3..8
   - an MDS matrix finder (random search for a matrix with B(M) >= t+1)
 
 It also exposes get_matrix(name, t) to obtain a matrix suitable for the
 requested state width t.
+
+Deterministic MDS construction
+------------------------------
+We use small-integer Cauchy matrices (C[i][j] = 1/(x_i + y_j)) with distinct
+x_i,y_j. Cauchy matrices are a standard MDS construction and work well over
+large prime fields. The Fp division operator is used to compute the entries.
 """
 
 from .field import Fp
@@ -125,6 +132,56 @@ def find_mds_matrix(t, attempts=2000):
     raise RuntimeError(f"Failed to find MDS-like matrix for t={t} after {attempts} attempts")
 
 
+# --- Deterministic Cauchy MDS matrices for t=4..8 ---------------------------
+
+def cauchy_mds(t, xs=None, ys=None):
+    """Build a t x t Cauchy matrix over Fp: C[i][j] = 1/(x_i + y_j).
+
+    xs and ys should be lists of distinct small integers such that x_i + y_j
+    are nonzero mod p. If None, default small disjoint sets are chosen.
+    """
+    if xs is None:
+        xs = [i + 1 for i in range(t)]
+    if ys is None:
+        ys = [t + 1 + i for i in range(t)]
+
+    # Build matrix using Fp division
+    M = []
+    for i in range(t):
+        row = []
+        xi = Fp(xs[i])
+        for j in range(t):
+            yj = Fp(ys[j])
+            denom = xi + yj
+            # denom should not be zero in the chosen small-integer construction
+            row.append(Fp(1) / denom)
+        M.append(row)
+    return M
+
+
+# Precompute deterministic MDS matrices for small t
+MDS_MATRIX_T4 = cauchy_mds(4)
+MDS_MATRIX_T5 = cauchy_mds(5)
+MDS_MATRIX_T6 = cauchy_mds(6)
+MDS_MATRIX_T7 = cauchy_mds(7)
+MDS_MATRIX_T8 = cauchy_mds(8)
+
+# verify they meet the branch number threshold at import time (sanity check)
+_precomputed_mds = {
+    3: MDS_MATRIX_T3,
+    4: MDS_MATRIX_T4,
+    5: MDS_MATRIX_T5,
+    6: MDS_MATRIX_T6,
+    7: MDS_MATRIX_T7,
+    8: MDS_MATRIX_T8,
+}
+
+for _t, M in _precomputed_mds.items():
+    bn = branch_number(M)
+    if bn < _t + 1:
+        raise RuntimeError(f"Precomputed matrix for t={_t} failed MDS check: B(M)={bn}")
+
+
 # --- Top-level accessor -----------------------------------------------------
 
 def get_matrix(name: str, t: int):
@@ -132,13 +189,18 @@ def get_matrix(name: str, t: int):
     Return a t x t matrix (list of lists of Fp) for the given name.
 
     Supported names:
-      - 'mds'      : attempt to produce an MDS matrix for given t
+      - 'mds'      : return a deterministic MDS matrix for 3 <= t <= 8, or try
+                     to produce one via randomized search for larger t
       - 'identity' : identity matrix of size t
       - 'circulant': circulant non-MDS example
       - 'poseidon2' : Poseidon2-like sparse matrix for experiments
     """
     name = name.lower()
     if name == "mds":
+        # return precomputed deterministic matrices for small t
+        if t in _precomputed_mds:
+            return _precomputed_mds[t]
+        # otherwise fall back to randomized finder
         return find_mds_matrix(t)
     if name == "identity":
         return identity_matrix(t)
