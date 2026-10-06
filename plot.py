@@ -45,7 +45,7 @@ KNOWN_MATRICES = ["mds", "identity", "circulant", "poseidon2"]
 def plot_diffusion(t=3, r_p=10, alpha=5, delta_val=4, matrices=None, save=None):
     data = compare_matrices(t=t, r_p=r_p, alpha=alpha, delta_val=delta_val)
 
-    fig, ax = plt.subplots(figsize=(9, 5))
+    fig, ax = plt.subplots(figsize=(5, 3))
     for name, trace in data.items():
         rounds = [x[0] for x in trace]
         diff   = [x[1] for x in trace]
@@ -58,7 +58,7 @@ def plot_diffusion(t=3, r_p=10, alpha=5, delta_val=4, matrices=None, save=None):
     ax.set_xlabel("Round", fontsize=12)
     ax.set_ylabel("Diffusion coefficient D(r)", fontsize=12)
     ax.set_title(
-        f"Diffusion over {r_p} partial rounds  |  t={t}, α={alpha}, Δ=(0,…,0,{delta_val})",
+        f"Diffusion over {r_p} partial rounds",
         fontsize=13,
     )
     ax.set_ylim(-0.05, 1.15)
@@ -132,7 +132,7 @@ def plot_branch_numbers(t=3, save=None):
 
     threshold = t + 1
 
-    fig, ax = plt.subplots(figsize=(7, 4))
+    fig, ax = plt.subplots(figsize=(5, 3))
     bars = ax.bar(
         [LABELS.get(n, n) for n in names],
         [bn if bn is not None else 0 for bn in bns],
@@ -156,7 +156,7 @@ def plot_branch_numbers(t=3, save=None):
 
     fig.tight_layout()
     if save:
-        fig.savefig(save, dpi=150)
+        fig.savefig(save, dpi=600)
         print(f"Saved: {save}")
     else:
         plt.show()
@@ -223,7 +223,7 @@ def plot_stats_overview(t=3, r_p=6, alpha=5, delta_val=4, save=None):
     )
     fig.tight_layout()
     if save:
-        fig.savefig(save, dpi=150)
+        fig.savefig(save, dpi=600)
         print(f"Saved: {save}")
     else:
         plt.show()
@@ -323,7 +323,7 @@ def plot_all(t=3, r_p=10, alpha=5, delta_val=4, save=None):
 
     fig.tight_layout()
     if save:
-        fig.savefig(save, dpi=150)
+        fig.savefig(save, dpi=600)
         print(f"Saved: {save}")
     else:
         plt.show()
