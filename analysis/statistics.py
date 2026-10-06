@@ -20,7 +20,7 @@ def compute_stats(t: int = 3, r_p: int = 6, alpha: int = 5, delta_val: int = 4) 
     }
     """
     stats = {}
-    for name, M in ["mds", "identity", "circulant", "poseidon2"]:
+    for name in ["mds", "identity", "circulant", "poseidon2"]:
         M = get_matrix(name, t)
         bn = branch_number(M)
         is_mds = bn >= t + 1

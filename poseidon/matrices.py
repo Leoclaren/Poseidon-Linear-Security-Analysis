@@ -83,26 +83,23 @@ def circulant_non_mds(t):
 
 def poseidon2_like_matrix(t):
     """
-    Official Poseidon2 partial-round (internal) matrix.
-    For t=3 this is the exact matrix from the Poseidon2 paper / HorizenLabs reference:
-        [[2, 1, 1],
-         [1, 2, 1],
-         [1, 1, 3]]
-    For larger t we use the standard "ones + diagonal" construction
-    with small distinct diagonal entries (still non-MDS).
+    Sparse non-MDS matrix in Poseidon2 style (diagonal-dominant with limited bandwidth).
+    For t=3 this has branch number 3 (non-MDS).
     """
     if t == 3:
         return [
-            [Fp(2), Fp(1), Fp(1)],
+            [Fp(2), Fp(1), Fp(0)],
             [Fp(1), Fp(2), Fp(1)],
-            [Fp(1), Fp(1), Fp(3)],
+            [Fp(0), Fp(1), Fp(3)],
         ]
 
-    # For t > 3: standard Poseidon2 internal form M = ones + diag(μ)
-    # with small distinct μ_i ≠ 0,1
-    M = [[Fp(1) for _ in range(t)] for _ in range(t)]
+    M = [[Fp(0) for _ in range(t)] for _ in range(t)]
     for i in range(t):
-        M[i][i] = Fp(2 + (i % 5))   # diagonal entries 2,3,4,5,6,...
+        M[i][i] = Fp(2 + (i % 3))
+        if i + 1 < t:
+            M[i][i+1] = Fp(1)
+        if i - 1 >= 0:
+            M[i][i-1] = Fp(1)
     return M
 
 
