@@ -68,7 +68,7 @@ def plot_diffusion(t=3, r_p=10, alpha=5, delta_val=4, matrices=None, save=None):
 
     fig.tight_layout()
     if save:
-        fig.savefig(save, dpi=150)
+        fig.savefig(save, dpi=600)
         print(f"Saved: {save}")
     else:
         plt.show()
@@ -90,7 +90,7 @@ def plot_degree(t=3, r_p=10, alpha=5, matrices=None, save=None):
         "poseidon2": dict(linestyle=':',  marker='D', linewidth=2.5, markersize=6, zorder=7),
     }
 
-    fig, ax = plt.subplots(figsize=(9, 5))
+    fig, ax = plt.subplots(figsize=(5, 3))
     for name, history in data.items():
         rounds = [h[0] for h in history]
         maxdeg = [max(h[2], 0.8) for h in history]  
@@ -109,7 +109,7 @@ def plot_degree(t=3, r_p=10, alpha=5, matrices=None, save=None):
 
     fig.tight_layout()
     if save:
-        fig.savefig(save, dpi=300, bbox_inches='tight')
+        fig.savefig(save, dpi=600, bbox_inches='tight')
         print(f"Saved: {save}")
     else:
         plt.show()
