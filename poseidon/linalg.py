@@ -223,6 +223,26 @@ def finite_trail_space_sequence(M, active_coords):
     return nullspace(rows)
 
 
+def mat_inv(M):
+    """
+    Inverse of a square matrix M over its own field, via Gauss-Jordan
+    elimination on the augmented [M | I] matrix (reusing rref()). Raises
+    ValueError if M is singular.
+
+    Added for attacks/midpoint_reset.py (Jo 2026/1760's "M = V U^-1"
+    interpolation step, RESEARCH_PLAN.md Step 7): nothing in this repo
+    previously needed a general matrix inverse (scoring/scanning only ever
+    needed rank/nullspace/characteristic polynomial).
+    """
+    n = len(M)
+    field = type(M[0][0])
+    aug = [list(M[i]) + [field(1) if i == j else field(0) for j in range(n)] for i in range(n)]
+    red, pivots = rref(aug)
+    if len(pivots) != n:
+        raise ValueError("mat_inv: matrix is singular")
+    return [row[n:] for row in red]
+
+
 def in_span(basis_vectors, vector):
     """Whether `vector` lies in the span of `basis_vectors` (rank trick)."""
     if not basis_vectors:

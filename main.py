@@ -55,6 +55,8 @@ from analysis.degree import (
 )
 from analysis.subspace_scanner import analyze_matrix_family, check_power_irreducibility
 from analysis.finite_trail_scanner import unified_criterion, finite_trail_profile, scan_full_round_matrix
+from poseidon.field import make_field
+from attacks.midpoint_reset import find_closing_amplitude, run_attack, check_bound_matrix_immune
 
 
 # ---------------------------------------------------------------------------
@@ -515,6 +517,80 @@ def cmd_degree(args):
 
 
 # ---------------------------------------------------------------------------
+# Subcommand: midpoint_reset  (Jo 2026/1760 replication + Step 3.1 binding test)
+# ---------------------------------------------------------------------------
+
+def _is_prime(n):
+    if n < 2:
+        return False
+    if n % 2 == 0:
+        return n == 2
+    i = 3
+    while i * i <= n:
+        if n % i == 0:
+            return False
+        i += 2
+    return True
+
+
+def cmd_midpoint_reset(args):
+    _print_separator("═")
+    print("MIDPOINT RESET — Jo 2026/1760 replication + Step 3.1 binding test")
+    _print_separator("═")
+    t, alpha, r_f, r_p = args.t, 3, 4, args.r_p
+    print(f"  toy field search from p={args.toy_prime}, t={t}, alpha=3, r_f=4, r_p={r_p}")
+    print("  (scope note: this replication covers alpha=3, r_f=4 — one full-round")
+    print("   block per side — and a small toy prime, not Jo's literal r_f=8/")
+    print("   KoalaBear instance; see attacks/midpoint_reset.py's module docstring.)\n")
+
+    # Whether the single-block-per-side construction admits a closing
+    # amplitude depends on the specific round constants (a nontrivial
+    # algebraic equation in one unknown, Sec 4's "admits a family of
+    # parameter choices" -- not every instance in that family has a toy-
+    # scale root). Scan forward from --toy_prime for one that does,
+    # exactly the kind of search Jo's own Sec 4 describes doing for their
+    # concrete KoalaBear instance.
+    print("  [Part 1] Replicating the attack against UNPROTECTED (unbound) constants...")
+    field = None
+    a = None
+    p = args.toy_prime
+    tried = 0
+    while tried < 50:
+        if _is_prime(p) and (p - 1) % 3 != 0:
+            tried += 1
+            cand_field = make_field(p, "FpToyCLI")
+            cand_constants = round_constants(t, r_f, r_p, field=cand_field)
+            cand_a = find_closing_amplitude(cand_constants, t, r_f, r_p, passive_index=1, field=cand_field)
+            if cand_a is not None:
+                field, a, constants = cand_field, cand_a, cand_constants
+                break
+        p += 2
+    if a is None:
+        print(f"    no closing amplitude found after scanning {tried} toy primes from {args.toy_prime}")
+        field = make_field(args.toy_prime, "FpToyCLI")
+    else:
+        print(f"    found at toy prime p={field.P} (scanned {tried} candidates)")
+        result = run_attack(constants, t, alpha, r_f, r_p, field, passive_index=1,
+                             search_a=False, fixed_a=a)
+        print(f"    closing amplitude a*={a}  collision_found={result['collision_found']}")
+        if result["collision_found"]:
+            print(f"    x+={[int(v) for v in result['x_plus']]}")
+            print(f"    x-={[int(v) for v in result['x_minus']]}")
+            print(f"    H(x+)=H(x-)={[int(v) for v in result['H_x_plus']]}")
+
+    print("\n  [Part 2] Does binding constants to the matrix (Step 3.1,")
+    print("           poseidon.matrix_search.generate_bound_round_constants) close this gap?")
+    print(f"           Scanning all {field.P - 1} nonzero amplitudes against an honestly")
+    print("           NUMS-generated, already-bound (M, c) pair...")
+    immune = check_bound_matrix_immune(t, alpha, r_f, r_p, field, passive_index=1,
+                                        seed_label=args.seed_label)
+    verdict = "IMMUNE" if immune["immune"] else "VULNERABLE"
+    print(f"    [{verdict}] family={immune['M_family']}  consistent_a_found={immune['consistent_a_found']}")
+
+    _print_separator("═")
+
+
+# ---------------------------------------------------------------------------
 # Main parser
 # ---------------------------------------------------------------------------
 
@@ -670,6 +746,18 @@ def build_parser():
                        help="Also track the degree-bar through the full-round prefix/suffix "
                             "(Step 1.1 of RESEARCH_PLAN.md), not just the partial rounds")
     p_deg.set_defaults(func=cmd_degree)
+
+    # midpoint_reset (Jo 2026/1760 replication + Step 3.1 binding test)
+    p_mr = sub.add_parser("midpoint_reset",
+                           help="Replicate Jo 2026/1760's full-round collision and test "
+                                "whether Step 3.1's constant-binding closes it")
+    p_mr.add_argument("--t", type=int, default=6, help="State width (default 6; needs L+2<=t)")
+    p_mr.add_argument("--r_p", type=int, default=4, help="Partial rounds (default 4)")
+    p_mr.add_argument("--toy_prime", type=int, default=10007,
+                       help="Small toy prime field (default 10007; must have gcd(3,p-1)=1)")
+    p_mr.add_argument("--seed_label", type=str, default="poseidon-sp2027-v1-midpoint-reset-test",
+                       help="NUMS seed label for Part 2's bound matrix")
+    p_mr.set_defaults(func=cmd_midpoint_reset)
 
     return parser
 

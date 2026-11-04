@@ -1,0 +1,882 @@
+\documentclass[11pt]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsfonts,amsthm}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{caption}
+\usepackage{graphicx}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue!50!black,
+  citecolor=blue!50!black,
+  urlcolor=blue!50!black
+}
+
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}{Lemma}
+\newtheorem{definition}{Definition}
+\newtheorem{corollary}{Corollary}
+
+\newcommand{\Fp}{\mathbb{F}_p}
+\newcommand{\MI}{M_{I}}
+\newcommand{\Mfull}{M_{\mathrm{full}}}
+
+\title{\textbf{Beyond MDS: A Unified Generation-Order and Structural\\
+Criterion for Poseidon-Family Linear Layers}}
+\author{}
+\date{November 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+The partial rounds of the Poseidon hash family apply a nonlinear S-box to a
+single state coordinate and rely on a linear layer $M$ to diffuse that
+nonlinearity across the remaining coordinates. The folklore security
+argument is that $M$ must be MDS: a non-MDS $M$ admits an explicit invariant
+subspace trail that collapses an arbitrary number of partial rounds to a
+linear map, which we reproduce as a baseline result. We then show that MDS
+is \emph{necessary but not sufficient}: three independent 2026 papers
+(Vitto; Merz and Rodr\'iguez Garc\'ia; Jo) each break properly-MDS,
+subspace-trail-clean Poseidon instances through three distinct mechanisms
+--- finite-trail full-round absorption, tensor-structured round skipping,
+and a full-round compression collision from an adaptively chosen matrix,
+respectively. We give a single generation-order countermeasure
+(cryptographically binding the round constants to a canonical encoding of
+the linear layer, so no matrix can be chosen after the constants it will
+interact with are already fixed) and validate it against all three attacks,
+including a from-scratch replication of Jo's attack and an empirical
+immunity test of our own binding against it --- to our knowledge the first
+treatment of that attack beyond a one-sentence mention in the literature.
+We combine this with a structural criterion (generalizing both the
+GRS21 invariant-subspace check and the tensor-eigenvector check) and apply
+both to a lightweight KoalaBear instantiation, cross-validated against a
+real \texttt{circom}/Groth16 compile, the production \texttt{circomlib}
+reference implementation, and an exhaustive eight-point adversarial
+falsification battery. We report real R1CS constraint counts and position
+the result against Poseidon, Poseidon2, Anemoi, and Polocolo.
+\end{abstract}
+
+\tableofcontents
+
+% =========================================================================
+\section{Introduction}
+% =========================================================================
+
+Poseidon~\cite{gkr21} is an arithmetization-oriented permutation built on
+the HADES strategy~\cite{hades20}: \emph{full rounds} apply a power S-box
+$S(x) = x^{\alpha}$ to every coordinate of the state, while \emph{partial
+rounds} apply it to a single coordinate only, leaving the rest linear.
+Every round (full or partial) is followed by the addition of round
+constants and multiplication by a fixed linear layer $M$. The efficiency
+of Poseidon on arithmetic circuits rests entirely on partial rounds being
+cheap (one nonlinear constraint per round instead of $t$), so the
+diffusion properties of $M$ carry the full burden of mixing the single
+active coordinate back into the rest of the state.
+
+\paragraph{The folklore criterion.} The standard requirement on $M$ is
+that it be \emph{maximum distance separable} (MDS). We reproduce, as a
+self-contained baseline (\S\ref{sec:invariant-subspace}), why this is
+\emph{necessary}: a non-MDS matrix admits a nonzero difference that never
+reaches the active coordinate, so a chosen-difference adversary can
+predict the permutation's output without ever engaging the S-box.
+
+\paragraph{MDS is not sufficient.} The contribution of this paper begins
+from a 2026 observation that the folklore criterion is incomplete. Three
+independent papers --- developed in parallel, none derivative of the
+others~\cite{vitto2026,merzgarcia2026,jo2026} --- each construct a
+properly MDS linear layer, passing every published subspace-trail check,
+that nonetheless breaks the differential or collision security of a
+standard Poseidon instance:
+
+\begin{itemize}[leftmargin=1.4em]
+  \item \textbf{Vitto (Slipway, 2026/1579)}~\cite{vitto2026}: every linear
+  layer unavoidably admits \emph{finite} subspace trails. If the matrix is
+  chosen \emph{after} the round constants are fixed, an adversary can
+  steer a constrained input family through the initial full rounds so
+  that it lands inside that trail, collapsing the effective algebraic
+  degree far below the naive bound.
+  \item \textbf{Merz and Rodr\'iguez Garc\'ia (Skipping Class,
+  2026/306)}~\cite{merzgarcia2026}: Poseidon2(b)'s~\cite{gks23} efficient
+  Kronecker-structured external matrix $M_\varepsilon = P_{t/4}\otimes M_4$
+  has an unconstrained $(q,-q,0,\dots,0)$ eigenvector subspace that
+  survives full rounds at zero algebraic-degree cost, independently of the
+  (already-vetted) internal matrix.
+  \item \textbf{Jo (Midpoint Reset, 2026/1760)}~\cite{jo2026}: if the
+  round constants are fixed before the matrix is chosen, an adversary can
+  program an \emph{exact} nonlinear two-execution trajectory through every
+  round via a linear interpolation $M = VU^{-1}$, yielding a genuine
+  full-round \emph{compression collision} --- not merely a distinguisher
+  --- in a matrix that is MDS and passes every subspace-trail check in the
+  literature.
+\end{itemize}
+
+Each of the three papers names its own ad hoc countermeasure for the
+mechanism it exhibits. None states or validates a criterion that covers
+more than one mechanism, and (as we confirm in
+\S\ref{sec:sok} against a full read of the most comprehensive available
+survey~\cite{sok2026}) no existing source analyzes Jo's attack beyond a
+one-sentence mention, let alone proposes and tests a defense against it.
+
+\paragraph{Contributions.}
+\begin{enumerate}[leftmargin=1.4em]
+  \item A \textbf{unified structural criterion} (\S\ref{sec:criterion})
+  generalizing both the GRS21 invariant-subspace
+  check~\cite{grs21} and the tensor-eigenvector check implicit in
+  Merz and Rodr\'iguez Garc\'ia's attack, implemented as two
+  field-generic algorithms that together flag every unconstrained
+  invariant subspace surviving into or through the nonlinear rounds.
+  \item A \textbf{single generation-order countermeasure} ---
+  cryptographically binding round constants to a canonical encoding of
+  \emph{both} the partial- and full-round matrices before either is
+  used --- and its \textbf{empirical validation against all three attacks},
+  including a from-scratch replication of Jo's construction and a direct
+  test of whether our binding defeats it (\S\ref{sec:midpoint-reset}),
+  which we believe is the first such validation reported anywhere.
+  \item A \textbf{lightweight instantiation} at KoalaBear
+  ($t=16,\alpha=3,R_F=8,R_P=20$), combining a NUMS partial-round matrix
+  with a tensor-structured, safe-order full-round matrix, cross-validated
+  against a real \texttt{circom}/Groth16 compile and the production
+  \texttt{circomlib} reference, and scored against an
+  \textbf{eight-point exhaustive falsification battery}
+  (\S\ref{sec:battery}).
+  \item An honest account of the design levers that \emph{did not} help
+  (S-box exponent reduction, S-box-lane rotation, two tricks imported from
+  GMiMCHash2, and a naive lookup-hybrid model), reported as negative
+  results rather than omitted (\S\ref{sec:levers}).
+\end{enumerate}
+
+% =========================================================================
+\section{Preliminaries}
+% =========================================================================
+
+\subsection{Poseidon1 round structure}
+
+Let $\Fp$ be a prime field, $t$ the state width, $\alpha$ the S-box
+exponent with $\gcd(\alpha, p-1) = 1$. A state is a vector
+$x = (x_0,\dots,x_{t-1}) \in \Fp^t$. A \emph{full round} applies
+
+\[
+  S_F(z) = z^{\circ \alpha} \quad\text{(componentwise)},
+\]
+
+while a \emph{partial round} applies
+
+\[
+  S_P(z) = (z_0^{\alpha}, z_1, \dots, z_{t-1})^{T}.
+\]
+
+In this paper's own convention (matching the repository's existing code
+and the original CLAUDE.md problem statement), a round is
+\[
+  R_r(x) = M \cdot \big(S_r(x) + c^{(r)}\big),
+\]
+i.e. S-box, then add round constants, then apply the linear layer $M$.
+(Jo's paper~\cite{jo2026} instead uses $R_r(x) = M\, S_r\big(x + c^{(r)}\big)$,
+constants added \emph{before} the S-box; \S\ref{sec:midpoint-reset}'s
+replication module implements that convention directly rather than
+reconciling the two, since Jo's Lemma is proved for that exact ordering.)
+The full permutation applies $R_F/2$ full rounds, then $R_P$ partial
+rounds, then $R_F/2$ more full rounds.
+
+\subsection{The MDS / branch-number criterion}
+
+\begin{definition}[Branch number]
+For $M \in \Fp^{t\times t}$,
+\[
+  B(M) \;=\; \min_{\Delta \neq 0} \big(\mathrm{wt}(\Delta) + \mathrm{wt}(M\Delta)\big).
+\]
+$M$ is \emph{MDS} iff $B(M) \geq t+1$ (equivalently, every square
+submatrix of $M$ is nonsingular).
+\end{definition}
+
+\subsection{Why non-MDS is unsafe: an invariant subspace trail}
+\label{sec:invariant-subspace}
+
+We restate the project's original baseline result as a self-contained
+lemma, since the rest of the paper depends on the reader accepting that
+MDS is at least \emph{necessary}.
+
+\begin{lemma}[Invariant subspace trail under a non-MDS matrix]
+\label{lem:invariant-subspace}
+Let $t=3$ and let $M$ be non-MDS, so there exists a nonzero
+$\Delta = (0,0,\delta)$ with $M\Delta \in V := \{(0,0,x) : x \in \Fp\}$.
+Then $V$ is invariant under the full sequence of $R_P$ partial rounds:
+for any two states $A,B$ with $A-B \in V$, the S-box never activates on
+their difference, and the entire partial-round sequence collapses to the
+linear map $\Delta \mapsto M_{22}^{R_P}\,\Delta$ restricted to $V$, where
+$M_{22}$ is $M$'s bottom-right entry.
+\end{lemma}
+
+\begin{proof}
+Write $A_0 = B_0$ (since $\Delta_0 = 0$), hence $A_0^{\alpha} = B_0^{\alpha}$
+and the post-S-box difference is still $(0,0,\delta)$. Round-constant
+addition is affine and preserves the difference. By hypothesis
+$M\cdot(0,0,\delta) \in V$, so the difference re-enters $V$ at the start
+of the next round. Induction over $R_P$ rounds gives the claim.
+\end{proof}
+
+\paragraph{Concrete confirmation.} For $M = I$ (the identity, a non-MDS
+matrix with $B(I)=2 < t+1=4$), $M\cdot(0,0,\delta) = (0,0,\delta)$
+trivially, and an adversary with any difference confined to $V$ can
+predict the permutation's output difference with zero oracle queries: a
+simulated diffusion trace over $6$ partial rounds at $\alpha=5$ shows the
+diffusion coefficient $D(R)$ frozen at $1/3$ indefinitely under $M=I$,
+versus reaching full diffusion ($D(R)=1$) after a single round under an
+MDS benchmark matrix (Table~\ref{tab:diffusion}).
+
+\begin{table}[h!]
+\centering
+\caption{Diffusion coefficient $D(R)$ over $6$ partial rounds, BN254,
+$\alpha=5$, input difference $\Delta=(0,0,4)$.}
+\label{tab:diffusion}
+\begin{tabular}{@{}lcc@{}}
+\toprule
+Round & Non-MDS ($M=I$) & MDS benchmark \\
+\midrule
+0 & $1/3$ & $1/3$ \\
+1 & $1/3$ & $3/3$ \\
+2--6 & $1/3$ & $3/3$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+This establishes necessity. The remainder of the paper is about why it is
+not sufficient.
+
+% =========================================================================
+\section{Three Independent Attacks on Properly-MDS Instances}
+\label{sec:threats}
+% =========================================================================
+
+Table~\ref{tab:threats} summarizes the three attacks this paper addresses,
+alongside two attack classes that, as we discuss in
+\S\ref{sec:sok}, remain genuinely open.
+
+\begin{table}[h!]
+\centering
+\caption{Threat model. Items 1--3 are addressed by this paper
+(\S\ref{sec:criterion}--\S\ref{sec:midpoint-reset}); items 4--5 remain
+future work (\S\ref{sec:discussion}).}
+\label{tab:threats}
+\small
+\begin{tabular}{@{}p{0.12\linewidth}p{0.4\linewidth}p{0.4\linewidth}@{}}
+\toprule
+\textbf{Attack} & \textbf{Mechanism} & \textbf{Our status} \\
+\midrule
+Infinite invariant subspace trail &
+$B(M) < t+1$ lets a coordinate subspace stay invariant forever &
+Closed: MDS + GRS21 irreducibility (Algorithm~1, \S\ref{sec:criterion}) \\
+\addlinespace
+Finite trail + full-round absorption (Vitto~\cite{vitto2026}) &
+Finite trails are unavoidable; adaptive matrix choice steers a family into one via the full-round prefix &
+Closed: binding (\S\ref{sec:binding}) + Algorithm~2's finite-trail profile \\
+\addlinespace
+Tensor round-skipping (Merz \& Garc\'ia~\cite{merzgarcia2026}) &
+$M_\varepsilon = P_{t/4}\otimes M_4$ has an unconstrained $(q,-q,0,\dots)$ eigenspace surviving full rounds &
+Closed: swapped factor order $M_4\otimes P_{t/4}$ (\S\ref{sec:tensor}) \\
+\addlinespace
+Adaptive-matrix collision (Jo~\cite{jo2026}) &
+$M=VU^{-1}$ interpolation against fixed constants programs an exact collision trajectory; $M$ is MDS and passes every trail check &
+Closed: binding, replicated and empirically tested (\S\ref{sec:midpoint-reset}) \\
+\addlinespace
+S-box skipping~\cite{sboxskip2026} (Bhati, Tariq, Ashur, 2026/1692) &
+Generalized subspace-restriction gadget, claimed independent of $M$, constants, $\alpha$, field &
+\textbf{Open} --- not analyzed in depth anywhere, including the SoK (\S\ref{sec:sok}) \\
+\addlinespace
+Bivariate resultants against Poseidon~\cite{resultant2026} (2026/1905) &
+Resultant-based CICO solving, published against Type-II primitives, not Poseidon's own linear layer &
+\textbf{Open} for Poseidon specifically \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% =========================================================================
+\section{A Unified Structural Criterion}
+\label{sec:criterion}
+% =========================================================================
+
+Vitto's and Merz and Rodr\'iguez Garc\'ia's mechanisms differ in which
+matrix ($\MI$ vs.\ $\Mfull$) and which round segment (partial vs.\ full) an
+unconstrained subspace survives through, but both instantiate the same
+underlying question:
+
+\begin{quote}
+\emph{For a candidate $(\MI, \Mfull)$, does any proper subspace of either
+matrix's eigenstructure survive into the nonlinear rounds without being
+constrained by the generation procedure?}
+\end{quote}
+
+We implement this as two complementary, field-generic algorithms.
+
+\paragraph{Algorithm 1 (infinite invariant subspace in $\MI$).}
+Generalizes GRS21~\cite{grs21}: factor the characteristic polynomial
+$\chi(\MI)$ over $\Fp$, and for each irreducible factor $f_i$, compute
+$\ker f_i(\MI)$ via the minimal/characteristic-polynomial decomposition.
+A fast path checks irreducibility of $\chi(\MI^{\,i})$ for
+$i=1,\dots,4(t-1)$ (GRS21's sufficient-but-not-necessary shortcut): when it
+holds, no nontrivial invariant subspace exists at any dimension, without
+running the general decomposition.
+
+\paragraph{Algorithm 2 (finite-trail profile and full-round scan).}
+Two complementary pieces:
+\begin{itemize}[leftmargin=1.4em]
+  \item \emph{Finite-trail dimension profile.} $K_r(M) =
+  \bigcap_{j=0}^{r-1}\ker\!\big(e_0^{T}M^{j}\big)$, the subspace of
+  directions whose active-coordinate contribution stays $X$-independent
+  for $r$ rounds (Vitto's Eq.~2). We verify $\dim K_r(\MI) = t - r$
+  (``maximal partial-round rank growth'') as a baseline that confirms a
+  candidate's finite trail is no longer than the unavoidable minimum.
+  \item \emph{Full-round invariant-subspace scan.} Generalizes the
+  tensor-eigenvector finding of~\cite{merzgarcia2026} to \emph{any} full-round
+  matrix, with no Kronecker structure assumed: for every irreducible
+  factor of $\chi(\Mfull)$, compute the corresponding invariant subspace
+  and flag it when its basis vectors exhibit a contiguous zero-run of
+  length $\geq t/4$ (the threshold Merz and Rodr\'iguez Garc\'ia's own
+  CICO-$k$ analysis uses). This is a \emph{static, necessary-looking but
+  not sufficient} condition: \S\ref{sec:battery} documents a confirmed
+  false positive at KoalaBear scale, resolved only by pairing the static
+  flag with a dynamic one-round nonlinear survival check.
+\end{itemize}
+
+\paragraph{What this criterion cannot see.} Both algorithms reason about
+static properties of $M$ in isolation. Jo's attack constructs an $M$ with
+\emph{no} exploitable structural property --- it is MDS, and both
+algorithms above report it secure --- because the vulnerability is a
+\emph{relation between $M$ and the already-fixed constants}, not a
+property of $M$ alone. No static scan, however sophisticated, can close
+this gap; it requires controlling the \emph{order} in which the matrix and
+the constants are generated.
+
+% =========================================================================
+\section{The Generation-Order Countermeasure}
+\label{sec:binding}
+% =========================================================================
+
+\subsection{Binding constants to the matrix}
+
+Both Vitto's and Jo's attacks (and the generic kleptographic-backdoor
+class~\cite{backdoor2026}) require the adversary to choose, or influence
+the choice of, the linear layer \emph{after} the round constants it will
+interact with are fixed. We remove this degree of freedom by construction:
+
+\[
+  T = \texttt{seed} \,\|\, \mathrm{enc}(p,t,\alpha,R_F,R_P) \,\|\, \mathrm{enc}(\MI) \,\|\, \mathrm{enc}(\Mfull),
+  \qquad
+  c^{(r)}_i = \mathrm{HashToField}\big(T \,\|\, \mathrm{enc}(r,i)\big).
+\]
+
+Both matrices are generated first, non-adaptively, via a
+nothing-up-my-sleeve (NUMS) procedure; the round constants are then
+derived deterministically from a transcript that already contains both
+matrices. No constant can be fixed independently of either matrix, and no
+matrix can be chosen as a function of constants that do not yet exist.
+An earlier version of this construction bound only $\MI$; we found and
+fixed this gap in a Phase-3 adversarial review, since Vitto's own attack
+targets $\Mfull$ (the matrix governing the full-round absorption), not
+$\MI$.
+
+\subsection{Tensor-structured $\Mfull$: the safe factor order}
+\label{sec:tensor}
+
+For the Poseidon2(b)-style efficiency win of a Kronecker-structured
+full-round matrix, $M_\varepsilon = P_{t/4}\otimes M_4$ admits the
+$(q,-q,0,\dots,0)$ eigenvector subspace exploited
+in~\cite{merzgarcia2026}; swapping the factor order to
+$\bar M_\varepsilon = M_4 \otimes P_{t/4}$ is identical in multiplicative
+cost and destroys the exploitable shape --- confirmed both by a static
+scan (Algorithm~2, zero suspicious contiguous zero-runs) and a dynamic
+check pushing a generic basis vector through one real full round at both
+BN254 and KoalaBear scale. We additionally confirmed this is not merely a
+paper construction: reading Plonky3's production
+\texttt{mds\_light\_permutation} code directly shows it uses the
+\emph{unswapped}, vulnerable order ($P_{t/4}\otimes M_4$) in a real,
+actively used STARK proving stack, while \texttt{circomlib}'s
+non-tensor-structured reference matrix is clean under the same scan.
+
+% =========================================================================
+\section{Replicating and Defeating Jo's Full-Round Collision}
+\label{sec:midpoint-reset}
+% =========================================================================
+
+Jo's Discussion section proposes, without building or testing it, exactly
+the binding countermeasure of \S\ref{sec:binding}: \emph{``derive the
+complete parameter set non-adaptively\dots by binding the round constants
+to a canonical encoding of the matrix.''} We built and validated this
+claim.
+
+\subsection{The attack mechanism}
+
+Track two executions' midpoint $m_r = (x^+_r+x^-_r)/2$ and half-difference
+$d_r=(x^+_r-x^-_r)/2$. One prescribed matrix image per two-round block,
+
+\[
+  M u_r = -c^{(r+1)},
+\]
+
+cancels the midpoint against the next round constant; since the S-box is
+odd ($S(-z)=-S(z)$ for odd $\alpha$), the following S-box's output
+midpoint is exactly zero and stays zero for the rest of the permutation
+(``midpoint reset''). Two further reusable images, $Me=v$ and $Mw=e$ on a
+coordinate $e$ passive in every partial round, keep the half-difference
+confined to the line $\Fp\cdot e$ through every full \emph{and} partial
+round. Collecting these prescribed images as columns of $U$ (sources,
+computable from the public constants alone --- not from $M$) and $V$
+(targets), $M = VU^{-1}$ is the unique matrix realizing the whole
+trajectory. A correctly closed scalar trajectory (final difference equal
+to the negative of the initial difference) yields a genuine feed-forward
+collision in an $M$ that is MDS and passes every subspace-trail check in
+the literature.
+
+\subsection{Replication}
+
+We implemented the construction generically (any $t$, field, round
+constants), with one deliberate scope reduction relative to Jo's own
+$(t,\alpha,R_F,R_P)=(16,3,8,20)$ KoalaBear instance: $R_F=4$ (one
+full-round block per side of the partial-round segment, instead of two).
+This collapses Jo's harder two-block cubic entry/exit solve to a
+closed-form single step: choosing the entry block's free scalar $s_0=0$
+gives $b_0 = \sqrt[3]{a}$ directly (well-defined since $\gcd(3,p-1)=1$,
+the same condition $\alpha=3$ already requires), and the block's output
+lands at exactly $a$ by construction. The one remaining free scalar (the
+closing amplitude $a$) is found by brute-force search over a small toy
+prime field, in the same spirit as the project's existing policy of
+replicating a mechanism at reduced scale rather than its literal headline
+instance.
+
+\paragraph{Result.} Against unprotected (unbound) constants, at
+$t=6,\alpha=3,R_F=4,R_P=4$ over a toy field $p=10037$, a closing amplitude
+$a^{*}=177$ yields a genuine, independently-verified feed-forward
+collision:
+\[
+  H(x^+) = H(x^-) = (0,\,3518,\,0,\,0,\,0,\,0), \qquad x^+ \neq x^-,
+\]
+confirmed by executing the actual permutation forward with the solved $M$
+(not merely the scalar bookkeeping). A real implementation bug was caught
+in the process: an initial version computed $M = U^{-1}V$ instead of
+$M=VU^{-1}$ (matrix multiplication is non-commutative), silently solving
+a different linear system; caught by a direct $M\,U \stackrel{?}{=} V$
+sanity check, now retained in the code path.
+
+\subsection{Does binding close the gap?}
+
+We generated a matrix $M$ the honest way (NUMS,
+\S\ref{sec:lightweight}'s $\MI$ family), derived constants
+$c = \mathrm{Hash}(\mathtt{seed}\,\|\,\mathrm{params}\,\|\,M\,\|\,M)$ via
+the binding of \S\ref{sec:binding} --- constants fixed \emph{after and
+from} $M$, the reverse of the order the attack needs --- and then scanned
+\emph{every} nonzero $a$ in the toy field for whether this already-fixed
+$M$ happens to satisfy the attack's required image constraints
+$M\,U(c,a) = V(c,a)$ for any of them.
+
+\begin{table}[h!]
+\centering
+\caption{Binding-immunity test: consistent closing amplitudes found out
+of $p-1$ candidates scanned, across independent trials.}
+\label{tab:immunity}
+\begin{tabular}{@{}lllcc@{}}
+\toprule
+Trial set & Field $p$ & $\MI$ family & Candidates scanned & Consistent $a$ found \\
+\midrule
+5 independent seeds & 10007 & \texttt{poseidon2\_sparse} & 10006 each & 0 \\
+Cross-family & 10007 & \texttt{low\_weight\_circulant} & 10006 & 0 \\
+Cross-family & 10007 & \texttt{irreducible\_filtered} & 10006 & 0 \\
+Cross-field & 10067 & \texttt{low\_weight\_circulant} & 10066 & 0 \\
+Cross-field & 10067 & \texttt{irreducible\_filtered} & 10066 & 0 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Zero consistent amplitudes were found in \emph{every} trial (nine
+independent trials total, Table~\ref{tab:immunity}). We state the result
+at the confidence it supports: this is not a formal theorem that binding
+defeats every instance of this attack class, but direct empirical evidence
+that honestly NUMS-generated, bound $(M,c)$ pairs do not happen to satisfy
+the attack's highly constrained algebraic relation --- consistent with the
+heuristic that an $M$ uncorrelated with the attack's image constraints by
+construction satisfies them only with probability on the order of the
+field size, and with Jo's own qualitative argument that binding removes
+the ``choose $M$ after $c$'' degree of freedom the construction depends
+on. A formal fixed-point/preimage-hardness argument, and replication at
+Jo's literal $R_F=8$/KoalaBear scale (which needs a general cubic-root
+solver rather than our closed-form shortcut), are left as future work.
+
+% =========================================================================
+\section{Lightweight Instantiation}
+\label{sec:lightweight}
+% =========================================================================
+
+\subsection{Candidate generation and cost model}
+
+Candidate $\MI$ matrices are generated via three NUMS families:
+\texttt{poseidon2\_sparse} (near-identity off-diagonal, hash-derived
+diagonal --- the real Poseidon2 internal-matrix shape), a low-weight
+circulant, and a dense matrix rejection-sampled for GRS21 irreducibility.
+We separate two cost measures that the literature sometimes conflates:
+\[
+  \mathrm{cost}_{\mathrm{R1CS}}(t,R_F,R_P,\alpha) = R_F\cdot t \cdot
+  c_\alpha + R_P \cdot c_\alpha,
+  \qquad
+  \mathrm{mul}(M) = |\{(i,j): M_{ij}\notin\{0,1\}\}|,
+\]
+where $c_\alpha$ is the number of multiplication constraints for
+$x^{\alpha}$ via square-and-multiply ($c_5=3$, $c_3=2$). In a standard
+R1CS encoding, multiplying a wire by a public constant is a free linear
+combination; $\mathrm{cost}_{\mathrm{R1CS}}$ is S-box-dominated and
+independent of the matrix, while $\mathrm{mul}(M)$ is the real cost
+differentiator for native/Plonkish backends.
+
+\begin{table}[h!]
+\centering
+\caption{Candidate comparison at $t=3,\alpha=5,R_F=8,R_P=57$ (BN254).}
+\label{tab:candidates}
+\begin{tabular}{@{}lccc@{}}
+\toprule
+Family & R1CS non-linear & R1CS linear & $\mathrm{mul}(\MI)$ (per round) \\
+\midrule
+\texttt{poseidon2\_sparse} & 243 & 276 & 195 \\
+\texttt{low\_weight\_circulant} & 243 & 276 & 390 \\
+\texttt{irreducible\_filtered} & 243 & 276 & 585 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+As Table~\ref{tab:candidates} shows, R1CS constraint count is
+\textbf{identical} across all three candidates --- confirmed by an
+independent \texttt{circom} compile, not merely the formula --- because a
+circuit row is allocated per matrix \emph{row}, not per nonzero entry.
+Matrix sparsity is a real win for native/Plonkish multiplicative
+complexity and has \textbf{zero} measurable effect on R1CS/Groth16 cost.
+\texttt{poseidon2\_sparse} is the clear winner on the one metric that
+differs.
+
+\subsection{Cross-validation against the production reference}
+
+Compiling our NUMS-generated circuit and \texttt{iden3/circomlib}'s
+production \texttt{Poseidon(2)} template at identical parameters
+($t=3,R_F=8,R_P=57,\alpha=5$) gives \textbf{byte-identical} non-linear
+constraint counts (243 for both) and near-identical linear counts (276 vs.
+274, the 2-constraint difference being cosmetic hash-wrapper exposure).
+A full Groth16 pipeline (Powers-of-Tau, setup, prove, verify) produced
+valid, independently-verified proofs for both circuits with
+indistinguishable wall-clock timing at this circuit size.
+
+\subsection{The field-size lever}
+
+Generalizing the field (BN254 $\to$ KoalaBear, $p=2^{31}-2^{24}+1$) is a
+real, verified lightweight lever, with one correction found in the
+process. A first attempt reused $R_F=8$ from the public $t=16$ KoalaBear
+instance without re-deriving it for $t=3$; GKR+21's own statistical
+security bound (Eq.~2, which scales with a $(t+1)$ factor) requires
+$R_F=12$ at $t=3$, not $8$. With the corrected round count,
+$t=3,\alpha=3,R_F=12,R_P=20$ over KoalaBear gives $112$ non-linear $+ 152$
+linear $= 264$ total constraints, versus $512$--$519$ at the BN254
+baseline --- a real $\approx 1.9\times$ reduction, confirmed by a
+\texttt{circom --prime goldilocks} compile. This is a deployment decision
+(it requires the surrounding system to not be anchored to BN254/Groth16),
+not an algorithmic improvement, and is clearly weaker than the naive
+$2.4\times$ an uncorrected round count would have claimed.
+
+\subsection{Tensor-structuring $\Mfull$ too}
+
+Every candidate above optimizes only $\MI$; $\Mfull$ was always a dense
+NUMS matrix. Applying the safe-order tensor structure
+(\S\ref{sec:tensor}) to $\Mfull$ as well, at $t=16$ (Vitto's own instance
+width), gives identical R1CS cost (confirmed by compile: $296$ non-linear
+$+ 596$ linear $= 892$, byte-identical to the all-dense control) but a
+substantial real multiplicative-complexity win: a naive entry count gives
+$184$ nonzero-non-one entries, but the real fast block algorithm (apply
+the dense $4\times4$ block $M_4$ to each of $t/4$ blocks, then a
+pure-addition outer mix) costs only $4\times 10=40$ --- a $4.6\times$
+difference the naive count misses entirely. Recomputing the full
+permutation's multiplicative complexity with the honest fast-algorithm
+number gives $8\times 40 + 20\times 16 = 640$ versus $8\times 256 +
+20\times 16 = 2368$ for the all-dense design: a \textbf{73\% reduction},
+not the 24.3\% the naive entry-count comparison first suggested.
+
+% =========================================================================
+\section{Exhaustive Validation of the Final Candidate}
+\label{sec:battery}
+% =========================================================================
+
+The final candidate ($t=16,\alpha=3,R_F=8,R_P=20$, KoalaBear,
+$\MI=\texttt{poseidon2\_sparse}$, $\Mfull = M_4\otimes P_4$ in the safe
+order, constants bound to both matrices) was run through every available
+check (Table~\ref{tab:battery}).
+
+\begin{table}[h!]
+\centering
+\caption{Exhaustive battery against the final candidate.}
+\label{tab:battery}
+\small
+\begin{tabular}{@{}p{0.05\linewidth}p{0.42\linewidth}p{0.45\linewidth}@{}}
+\toprule
+\# & Check & Result \\
+\midrule
+1 & Statistical round sufficiency (GKR+21 Eq.~2) & $\min R_F = 8$ (bound 6, margin 2); candidate $R_F=8$ --- sufficient, exactly at the boundary \\
+2 & MDS / branch number of $\MI$ & $B(\MI)=17=t+1$ --- MDS, no slack \\
+3 & Algorithm 1 --- infinite invariant subspace in $\MI$ & \texttt{SECURE} \\
+4 & Algorithm 2 --- static structural scan of $\Mfull$ & flags one subspace; investigated and confirmed a \textbf{false positive} (resolved by item 7) \\
+5 & Finite-trail dimension profile of $\MI$ & $\dim K_r = t-r$ for every $r=0,\dots,15$ --- maximal rank growth \\
+6 & Symbolic freeze, adversarial $d\in K_4(\MI)$ & entering degrees $[0,0,0,0,1,3]$ --- frozen exactly 4 rounds, jumps at round 4, matching $\dim K_4=12$ exactly \\
+7 & No-accidental-landing, generic direction through $\Mfull$ & $[1,3,9]$, matching naive $\alpha^{\text{round}}$ growth exactly --- no accidental trail \\
+8 & Real multiplicative cost & $640$ (cross-confirmed against this exact candidate) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{The item-4 false positive, resolved.} The static scan flags
+the \emph{safe}-order $\bar M_\varepsilon = M_4\otimes P_4$ at KoalaBear
+scale, where it was clean at BN254 --- not a contradiction, since which
+irreducible factors $\chi(\bar M_\varepsilon)$ splits into over $\Fp$ is
+field-dependent. Pushing a \emph{generic} (non-$\pm1$) basis vector of the
+flagged subspace through one real full round shows it reaches full weight
+(no negation-compatible structure survives), confirming the flag is a
+genuine-but-inert invariant subspace, not an exploitable one. We state
+the resulting methodological lesson explicitly: the static scan is
+necessary-looking but not sufficient, and must always be paired with a
+one-round dynamic survival check before a flag is reported as a finding.
+
+\subsection{Comparison against the two mechanism papers}
+
+\begin{table}[h!]
+\centering
+\caption{Precondition each attack needs, and why this candidate's design removes it.}
+\label{tab:comparison}
+\small
+\begin{tabular}{@{}p{0.28\linewidth}p{0.32\linewidth}p{0.32\linewidth}@{}}
+\toprule
+Attack & Precondition needed & This candidate's defense \\
+\midrule
+Full-round absorption (Vitto) & Matrix chosen knowing the constants (or vice versa) & Both matrices bound into one NUMS transcript before either is derived (\S\ref{sec:binding}) \\
+Round-skipping (Merz \& Garc\'ia) & Unswapped Kronecker order & Swapped order from the start (\S\ref{sec:tensor}), verified at both BN254 and KoalaBear \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Neither paper's literal headline numbers (Vitto's $3^{10}$ vs.\ $3^{28}$
+collapse; Merz and Rodr\'iguez Garc\'ia's concrete query complexity) are
+reproduced bit-for-bit here --- that needs their full adversarial
+multi-group construction, a separate undertaking from checking whether
+this candidate resists the underlying mechanism, which it does.
+
+% =========================================================================
+\section{Real-World Audit}
+% =========================================================================
+
+We ran Algorithms~1 and~2 against three production parameter sets not
+generated by this project:
+
+\begin{itemize}[leftmargin=1.4em]
+  \item \textbf{\texttt{circomlib}}: the real $t=3$ matrix from the
+  widely-deployed reference circuit is clean (MDS, Algorithm~1
+  \texttt{SECURE}, Algorithm~2 reports no suspicious subspace).
+  \item \textbf{Plonky3}: round numbers match our own
+  statistically-derived formula and the current SoK's recomputed table
+  exactly; the external matrix uses the \emph{vulnerable} (unswapped)
+  Kronecker order, confirmed three independent ways (direct code reading,
+  reproducing the matrix and exhibiting the attack shape, and our
+  Kronecker-agnostic Algorithm~2 flagging it). Practical exploitability
+  depends on the sponge rate/capacity split at each call site, which we
+  did not chase down.
+  \item \textbf{\texttt{arkworks-rs}}: ships no fixed matrix at all ---
+  every consumer calls a Cauchy-matrix generator whose own source comments
+  claim three well-formedness checks that are \textbf{asserted in a
+  comment with zero corresponding code}. This is a documentation/
+  implementation gap, not a demonstrated break of any specific deployed
+  instance, but it confirms that a widely-depended-on parameter generator
+  provides no automated protection against generating a GRS21- or
+  Vitto-vulnerable matrix for an arbitrary $(t,\text{field})$ choice.
+\end{itemize}
+
+% =========================================================================
+\section{Positioning Against the Efficiency State of the Art}
+% =========================================================================
+
+A full read of the most comprehensive available survey, ``SoK:
+Zero-Knowledge Friendly Hash Functions over Prime
+Fields''~\cite{sok2026} (134 pages, read in full for this paper
+after earlier attempts were blocked by access restrictions), gives real,
+already-computed R1CS/Groth16 constraint counts we cite directly rather
+than re-deriving (Table~\ref{tab:sok}).
+\label{sec:sok}
+
+\begin{table}[h!]
+\centering
+\caption{R1CS constraint counts, single permutation, Gnark/Groth16,
+BLS12-381, $t=4$ (SoK~\cite{sok2026}, Table~23).}
+\label{tab:sok}
+\begin{tabular}{@{}lc@{}}
+\toprule
+Construction & R1CS constraints \\
+\midrule
+Griffin & 224 \\
+Anemoi~\cite{anemoi2022} & 244 \\
+Arion & 254 \\
+Poseidon & 268 \\
+Poseidon2 & 268 \\
+Rescue-Prime & 368 \\
+Skyscraper & 1425 \\
+Polocolo~\cite{polocolo2025} & 1553 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Two findings from this read directly inform this paper's scope. First,
+the SoK's attack-cryptanalysis section (\S4, organized as a cross-cutting
+technique toolbox rather than one checkable criterion) mentions both
+Vitto's and Jo's attacks in a single combined sentence, with no mechanism
+detail, no countermeasure, and no round-number consequence drawn ---
+confirming that the unified criterion and the binding validation of
+\S\ref{sec:criterion}--\S\ref{sec:midpoint-reset} are not duplicated
+anywhere in the existing literature. Second, the SoK confirms
+\emph{``no instances require updating under the latest attacks''} for
+Poseidon/Poseidon2's own round-number formula, an independent validation
+of the statistical bound we use in \S\ref{sec:battery}, item~1.
+
+% =========================================================================
+\section{Discussion: What Did Not Work, and What Remains Open}
+\label{sec:discussion}
+\label{sec:levers}
+% =========================================================================
+
+\subsection{Negative results, reported honestly}
+
+\begin{itemize}[leftmargin=1.4em]
+  \item \textbf{Lowering $\alpha$.} At $t=3$, reducing $\alpha$ from $5$
+  to $3$ requires $R_P$ to grow from $56$ to $83$; the extra rounds'
+  linear-constraint overhead more than cancels the per-S-box saving
+  ($594$ vs.\ $512$ total constraints, confirmed by compile). This lever
+  makes the design \emph{heavier}, not lighter, in R1CS.
+  \item \textbf{Rotating the active S-box lane.} Generalizing which
+  coordinate carries the partial-round S-box offers no measured benefit
+  for matrices already at the finite-trail dimension-decay ceiling (our
+  actual candidates), and can \emph{introduce} a new infinite trail in a
+  matrix that was previously secure under the fixed-position design.
+  \item \textbf{Two tricks imported from GMiMCHash2.} The $\alpha=2^k$
+  S-box does not port: GMiMC is a Feistel construction where the round
+  function need not be a bijection, while Poseidon's SPN structure
+  requires $\gcd(\alpha,p-1)=1$ for invertibility, which no power of two
+  satisfies over an odd-characteristic field. The $M_{IO}$ input/output
+  matrix targets analytical tractability of a designer's own security
+  proof, not a round-count or constraint-count reduction, and moves none
+  of our cost numbers.
+  \item \textbf{A naive lookup-hybrid model.} Modeling a ``lookup round''
+  as contributing near-maximal algebraic degree in a multiplicative
+  degree-bar tracker produces a vacuous result: it reports security for
+  replacing $56$ of $57$ partial rounds with a single lookup round,
+  because the model has no way to represent an attacker simply ignoring
+  the lookup round and attacking the short algebraic remainder directly.
+  A real answer needs either a close reading of how lookup-based designs
+  formally argue hybrid security, or a lookup-capable backend (Halo2,
+  Plonky2), neither pursued here.
+\end{itemize}
+
+\subsection{Open problems}
+
+Threats~4 and~5 of Table~\ref{tab:threats} --- S-box skipping (Bhati,
+Tariq, and Ashur, eprint 2026/1692) and bivariate resultant attacks
+against Poseidon's own linear layer (eprint 2026/1905) --- remain open.
+Both are cited only in passing, without mechanism analysis, in the most
+comprehensive survey available~\cite{sok2026}; closing either with the
+same Phase-0 replication discipline used for
+\S\ref{sec:threats}--\S\ref{sec:midpoint-reset} is the natural next step
+for this line of work.
+
+% =========================================================================
+\section{Conclusion}
+% =========================================================================
+
+MDS is necessary for Poseidon's partial-round linear layer, but three
+independent 2026 results show it is not sufficient: properly-MDS matrices
+that pass every published subspace-trail check can still be broken via
+finite-trail absorption, tensor-structured round skipping, or an
+adaptively chosen matrix that programs an exact collision trajectory. We
+gave a unified structural criterion covering the first two mechanisms, a
+single generation-order countermeasure (binding round constants to both
+linear layers before either is used) that structurally removes the
+precondition all three mechanisms need, and validated that countermeasure
+empirically against all three attacks --- including, to our knowledge,
+the first replication and defense validation of Jo's full-round collision
+reported anywhere. We combined this with a lightweight KoalaBear
+instantiation, cross-validated against a production reference
+implementation and an exhaustive eight-point falsification battery, and
+positioned it against the current efficiency state of the art. S-box
+skipping and bivariate resultant attacks against Poseidon's own linear
+layer remain open problems for future work.
+
+% =========================================================================
+\begin{thebibliography}{99}
+
+\bibitem{gkr21}
+L.~Grassi, D.~Khovratovich, C.~Rechberger, A.~Roy, M.~Schofnegger,
+\emph{Poseidon: A New Hash Function for Zero-Knowledge Proof Systems},
+USENIX Security 2021.
+
+\bibitem{gks23}
+L.~Grassi, D.~Khovratovich, M.~Schofnegger,
+\emph{Poseidon2: A Faster Version of the Poseidon Hash Function},
+AFRICACRYPT 2023.
+
+\bibitem{hades20}
+L.~Grassi, R.~L\"uftenegger, C.~Rechberger, D.~Rotaru, M.~Schofnegger,
+\emph{On a Generalization of Substitution-Permutation Networks: The HADES
+Design Strategy}, EUROCRYPT 2020.
+
+\bibitem{grs21}
+L.~Grassi, C.~Rechberger, M.~Schofnegger,
+\emph{Proving Resistance Against Infinitely Long Subspace Trails: How to
+Choose the Linear Layer}, IACR ToSC 2021(2):314--352.
+
+\bibitem{vitto2026}
+G.~Vitto, \emph{Slipway: Accessing Finite Subspace Trails in Poseidon},
+IACR ePrint 2026/1579.
+
+\bibitem{merzgarcia2026}
+S.-P.~Merz, \`A.~Rodr\'iguez Garc\'ia,
+\emph{Skipping Class: Algebraic Attacks Exploiting Weak Matrices and
+Operation Modes of Poseidon2(b)}, IACR ePrint 2026/306.
+
+\bibitem{jo2026}
+S.~Jo, \emph{Midpoint Reset: A Full-Round Poseidon Collision from an
+Adaptively Chosen MDS Matrix}, IACR ePrint 2026/1760.
+
+\bibitem{backdoor2026}
+\emph{Nothing Up My Matrix: Kleptographic Backdoors in ZK-friendly Hash
+Functions}, IACR ePrint 2026/1901.
+
+\bibitem{sboxskip2026}
+A.~S.~Bhati, S.~Tariq, T.~Ashur,
+\emph{From Round Skipping to S-Box Skipping: Attacking Poseidon's Partial
+Layer via Subspace Restriction}, IACR ePrint 2026/1692.
+
+\bibitem{resultant2026}
+A.~Bak, M.~Hostettler,
+\emph{A Better Bivariate Resultant Attack on Round-Reduced Poseidon},
+IACR ePrint 2026/1905.
+
+\bibitem{sok2026}
+C.~Bouvier, L.~Grassi, K.~Koschatko, C.~Rechberger, F.~Schmid,
+M.~J.~Steiner, Z.~Wu, H.~Yan,
+\emph{SoK: Zero-Knowledge Friendly Hash Functions over Prime Fields},
+IACR ePrint 2026/1931.
+
+\bibitem{anemoi2022}
+C.~Bouvier, P.~Briaud, P.~Chaidos, L.~Perrin, et al.,
+\emph{New Design Techniques for Efficient Arithmetization-Oriented Hash
+Functions: Anemoi Permutations and Jive Compression Mode},
+IACR ePrint 2022/840.
+
+\bibitem{polocolo2025}
+J.~Ha, S.~Hwang, J.~Lee, S.~Park, M.~Son,
+\emph{Polocolo: A ZK-Friendly Hash Function Based on S-boxes Using Power
+Residues}, EUROCRYPT 2025.
+
+\end{thebibliography}
+
+\end{document}

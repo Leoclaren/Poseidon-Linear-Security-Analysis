@@ -1,0 +1,589 @@
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{amsthm}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{makecell}
+\usepackage{adjustbox}
+
+\usepackage[style=numeric, backend=biber]{biblatex}
+\addbibresource{references.bib}
+
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}
+
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}{Lemma}
+\newtheorem{proposition}{Proposition}
+
+\usepackage{microtype}
+\usepackage{listings}
+
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+
+% Configuration for code listings
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codeback}{rgb}{0.97,0.97,0.97}
+\lstset{
+    backgroundcolor=\color{codeback},
+    basicstyle=\ttfamily\small,
+    breaklines=true,
+    captionpos=b,
+    commentstyle=\color{codegray},
+    frame=single,
+    keepspaces=true,
+    numbers=none,
+    keywordstyle=\color{black}\bfseries,
+    showspaces=false,
+    showstringspaces=false,
+    showtabs=false,
+    tabsize=4
+}
+
+\usepackage{hyperref}
+
+\begin{document}
+
+\title{pending}
+
+\author{
+\IEEEauthorblockN{Chaolu Liu}
+\IEEEauthorblockA{\textit{School of Computer Science} \\
+\textit{University College Dublin}\\
+Dublin, Ireland \\
+cl5248@hotmail.com}
+\and
+\IEEEauthorblockN{Emilio Martinez}
+\IEEEauthorblockA{\textit{School of Computing} \\
+\textit{National College of Ireland}\\
+Dublin, Ireland \\
+eyolticmg@icloud.com}
+\and
+\IEEEauthorblockN{Furqan Rustam}
+\IEEEauthorblockA{\textit{School of Computer Science} \\
+\textit{University College Dublin}\\
+Dublin, Ireland \\
+furqan.rustam1@gmail.com}
+\and
+\IEEEauthorblockN{Anca Delia Jurcut}
+\IEEEauthorblockA{\textit{School of Computer Science} \\
+\textit{University College Dublin}\\
+Dublin, Ireland \\
+anca.jurcut@ucd.ie}
+}
+
+\maketitle
+
+\begin{abstract}
+pending
+\end{abstract}
+\begin{IEEEkeywords}
+Poseidon, Poseidon2, temporal diffusion, algebraic reachability,
+subspace trails, algebraic cryptanalysis, zero-knowledge proofs
+\end{IEEEkeywords}
+
+\section{Introduction}
+\label{sec:introduction}
+
+\subsection{Problem Statement}
+Given a fully specified permutation, an application interface, and a
+resource budget, determine whether a candidate low-growth trajectory
+can be reached from admissible inputs, traversed with a checkable
+algebraic certificate, and used to meet the required output constraints.
+The output should separate a structural witness from an attack witness
+and compare total attack cost with an appropriate baseline.
+
+The analysis has three objectives: characterize round-dependent inactive
+directions; determine constrained entry and exit feasibility; and assess
+whether exploiting a certified trajectory improves the specified attack
+task. Structural exclusions remain scoped to the tested model.
+\textcolor{red}{pending text: Establish a distinct technical improvement
+for a declared class of instances and complete the corresponding
+fixed-instance attack or exclusion argument.}
+
+\textcolor{blue}{How to reconcile cryptographic safety against advanced algebraic attacks, such as subspace trails and full-round absorption, with the lightweight arithmetization efficiency in ZK-friendly permutations?}
+
+
+\section{Background}
+\label{sec:background}
+Let $p$ be prime and $x_r\in\mathbb F_p^t$. For the analysis below use
+\begin{equation}
+x_{r+1}=R_r(x_r)=M_rS_r(x_r+c_r)+d_r,
+\label{eq:round}
+\end{equation}
+where $M_r\in\mathrm{GL}_t(\mathbb F_p)$ and $c_r,d_r\in\mathbb F_p^t$.
+For an active set $A_r\subseteq\{0,\ldots,t-1\}$, let
+\[
+(S_r(z))_j=
+\begin{cases}
+z_j^{\alpha_r},&j\in A_r,\\
+z_j,&j\notin A_r,
+\end{cases}
+\quad \gcd(\alpha_r,p-1)=1.
+\]
+Full rounds activate every coordinate; partial rounds activate a proper
+subset. The source convention $M_r(S_r(x_r)+C_r)$ is recovered by
+$c_r=0$, $d_r=M_rC_r$.
+Actual instances must preserve their specified operation order and
+initial mixing. These power-map arguments do not automatically apply to
+different nonlinear layers.
+\textcolor{red}{pending text: Provide tested specification adapters,
+version hashes, and known-answer vectors for each evaluated instance,
+including Neptune if retained.}
+
+Let $E_r$ select the active coordinates and $W_r=\ker E_r$. Write
+$F_{a,b}=R_{b-1}\circ\cdots\circ R_a$ and $F_{a,a}=I$.
+An affine family $a+Bz$ uses a full-column-rank basis
+$B\in\mathbb F_p^{t\times k}$ and $z\in\mathbb F_p^k$.
+
+For degree and diffusion. The branch number is
+\[
+B_d(M)=\min_{v\ne0}\bigl(\mathrm{wt}(v)+\mathrm{wt}(Mv)\bigr).
+\]
+An MDS matrix has branch number $t+1$. This one-step support property
+does not exclude multiround cancellations or constrained directions.
+Distinguish formal polynomial degree, degree after family substitution,
+and degree after field-equation reduction. Degree-propagation recurrences
+are upper bounds unless tightness is proved; cancellation can occur.
+These quantities alone do not determine the solving degree of a
+Gr\"obner-basis computation.
+
+\section{Related Work}
+\label{sec:related}
+
+The security analysis of ZK-friendly permutations heavily relies on characterizing the propagation of algebraic properties through rounds with partial non-linear layers. Early investigations primarily focused on identifying invariant spaces and establishing sufficient conditions to prevent infinitely long subspace trails under stationary linear layers~\cite{weaklayers2020, algebraiccrypt2023}. Complementing these structural checks, Keller and Rosemarin re-evaluated the security margins of the HADES design strategy by examining the middle layers~\cite{mindthemiddle2021}. More recently, research has shifted toward finite-horizon and dynamic vulnerabilities. Li and Wang formalized block-matrix criteria for finite linear subspace trails, demonstrating their unavoidability in standard designs~\cite{cryptoeprint:2026/967}. Concurrently, Grassi, Koschatko, and Rechberger explored trail-assisted Gröbner basis solving strategies across various operational modes~\cite{poseidonneptune2025}. Regarding the reachability of these internal trajectories through full-round prefixes, Vitto introduced the concept of full-round absorption and adaptive weak matrix construction (Slipway), showing how constrained families can bypass initial degree growth~\cite{slipway2026}. Furthermore, Li, Liu, and Wang extended these structural insights beyond linear boundaries by developing non-linear subspace methods for advanced algebraic attacks~\cite{nonlinear2026}. While existing literature thoroughly characterizes individual trail structures and specific attack vectors, our work builds upon these frameworks by formalizing temporal diffusion networks and examining the rigorous algebraic reachability conditions governing constrained input-output mapping.
+
+
+\section{Threat Model}
+\label{sec:model}
+
+\subsection{Threat Model and Attack Tasks}
+For a fixed-instance attack, the public matrix, constants, and mode
+are fixed before target selection. The adversary may not replace them.
+Given admissible inputs $\mathcal I$ and required outputs $\mathcal O$,
+the constrained-input, constrained-output (CICO) task is to find
+\begin{equation}
+x\in\mathcal I,\qquad F_{0,R}(x)\in\mathcal O.
+\label{eq:cico}
+\end{equation}
+Record fixed coordinates, target distribution, and whether targets are
+adversarially chosen. Hash preimages and collisions must additionally
+respect the message interface, padding, domain separation, rate/capacity,
+and any compression feed-forward. CICO is not an automatic reduction
+to every mode~\cite{poseidonneptune2025,cryptoeprint:2026/306}.
+\textcolor{red}{pending text: Instantiate attack games, generic comparison
+algorithms, success criteria, and concrete resource bounds. A protocol
+forgery claim requires a specified protocol and a verifier-accepting
+transcript violating the stated security goal.}
+\subsection{Success Criteria and Cost Accounting}
+Restricted degree alone does not imply proportional reduction in solving
+degree or practical attack cost. Variables, sparsity, term order, field
+equations, and solver implementation also matter. Record
+\begin{equation}
+\begin{split}
+C_{\rm total}={}&C_{\rm search}+C_{\rm entry}+C_{\rm solve}\\
+&+C_{\rm output}+C_{\rm verify},
+\end{split}
+\label{eq:cost}
+\end{equation}
+with repetition counts, success probability, memory, and amortized
+precomputation separately stated.
+\textcolor{red}{pending text: Establish a justified complexity model and
+measured end-to-end advantage. The source's algebraic-complexity-collapse
+theorem is not established and is not retained as a result.}
+
+
+\section{Methodology}
+\label{sec:methodology}
+\label{sec:theory}
+The technical approach has three components. Temporal analysis produces
+candidate direction spaces over a declared round interval. Reachability
+analysis then tests compatibility with the input, prefix, suffix, and
+output constraints. Certificate-producing analysis records the resulting
+scoped claims and checks witnesses independently.
+\subsection{Temporal Diffusion Networks}
+\begin{definition}[Support TDN]
+For interval $[a,b)$, create vertices $(r,j)$ at round boundaries.
+Include $(r,j)\to(r+1,i)$ if $(M_r)_{ij}\ne0$, and label the
+nonlinear operation at $(r,j)$ when $j\in A_r$.
+\end{definition}
+This graph represents possible dependencies in the coordinatewise round
+model. Constants do not introduce dependence on family parameters.
+Graph reachability overapproximates algebraic dependence: weighted paths
+can cancel, and a direction can have zero projection on an active
+coordinate despite existing paths.
+The intended exact TDN layer stores transition matrices, selectors, and
+surviving direction bases.
+\textcolor{red}{pending text: Define and prove any stronger correspondence
+between TDN properties and algebraic trajectories. A support graph alone
+is not an exact certificate.}
+\subsubsection{Finite-Horizon Inactive Directions}
+Set $\Phi_{a,a}=I$ and $\Phi_{a,r}=M_{r-1}\cdots M_a$ for $r>a$.
+Define
+\begin{equation}
+H_{a,b}=
+\begin{bmatrix}
+E_a\Phi_{a,a}\\ E_{a+1}\Phi_{a,a+1}\\ \vdots\\
+E_{b-1}\Phi_{a,b-1}
+\end{bmatrix},
+\qquad K_{a,b}=\ker H_{a,b}.
+\label{eq:observability}
+\end{equation}
+The following elementary identities are background linear algebra,
+not new cryptanalytic contributions.
+
+\begin{proposition}[Affine propagation]
+\label{prop:affine}
+If the columns of $B$ lie in $K_{a,b}$, then for every base state $q$,
+\begin{equation}
+F_{a,r}(q+Bz)=F_{a,r}(q)+\Phi_{a,r}Bz
+\label{eq:affine}
+\end{equation}
+for all $z$ and $a\le r\le b$.
+\end{proposition}
+\begin{proof}
+The identity holds at $r=a$. At each boundary $r<b$,
+$E_r\Phi_{a,r}B=0$, so every family variation $v=\Phi_{a,r}Bz$
+is zero at the active coordinates. Thus $S_r(y+v)=S_r(y)+v$
+for every $y$. Substitution into~\eqref{eq:round} multiplies the
+variation by $M_r$, while constants cancel. Induction proves the claim.
+\end{proof}
+The degree is at most one in the family parameters during this interval,
+not necessarily in unrestricted inputs to the whole permutation.
+The base state's active coordinates may be nonzero. No condition that
+round constants lie in the direction space is needed.
+
+\begin{proposition}[Dimension]
+\label{prop:dimension}
+If $H_{a,b}$ has $m$ rows, then
+$\dim K_{a,b}=t-\operatorname{rank}(H_{a,b})\ge\max(0,t-m)$.
+In particular, $h<t$ one-active-coordinate rounds always have a
+nonzero certified direction, including with MDS mixing.
+\end{proposition}
+\begin{proof}
+Apply rank--nullity and the bound
+$\operatorname{rank}(H_{a,b})\le\min(t,m)$.
+\end{proof}
+Consequently, a short finite inactive-direction trail is not by itself
+evidence of a defective matrix.
+
+\subsubsection{Stationary Layers and Exact Controls}
+For stationary $M_r=M$, $E_r=E$, set
+\begin{equation}
+H_t=[E^\top,(EM)^\top,\ldots,(EM^{t-1})^\top]^\top,
+\quad K_\infty=\ker H_t.
+\label{eq:stationary}
+\end{equation}
+\begin{proposition}[Largest inactive invariant subspace]
+$K_\infty=\bigcap_{j\ge0}\ker(EM^j)$ is the largest $M$-invariant
+subspace contained in $\ker E$.
+\end{proposition}
+\begin{proof}
+Cayley--Hamilton expresses every higher power as a linear combination
+of $I,M,\ldots,M^{t-1}$, giving the intersection identity.
+If $v$ lies in that intersection, so does $Mv$. Conversely, any
+$M$-invariant $V\subseteq\ker E$ satisfies $EM^jV=0$ for all $j$.
+\end{proof}
+This is a certificate for inactive directions in the stated model,
+not an exclusion of active or nonlinear trails~\cite{weaklayers2020,nonlinear2026}.
+For stationary one-coordinate activation define
+$\tau(v)=\min\{j\ge0:EM^jv\ne0\}$, with value $\infty$ if empty.
+If $\tau(v)=d$, the first $d$ rounds are affine along $v$.
+Subsequent activation does not prove a prescribed global degree or cost.
+
+Exact controls are available without experiments.
+For $M=I$, $E=e_0^\top$, the kernel has dimension $t-1$.
+For the cyclic shift
+$M(x_0,\ldots,x_{t-1})^\top=(x_1,\ldots,x_{t-1},x_0)^\top$,
+the first $t$ rows $EM^j$ select all coordinates.
+Thus $K_\infty=0$ and the horizon-$h$ kernel has dimension $t-h$
+for $h\le t$. These are mathematical controls, not measured results.
+\subsection{Constrained Algebraic Reachability}
+\label{sec:reachability}
+For candidate affine sets $q_r+\operatorname{im}B_r$, individual-state
+reachability is the feasibility problem
+\begin{equation}
+\begin{split}
+x_0&\in\mathcal I,\quad x_R\in\mathcal O,\\
+x_{r+1}&=R_r(x_r)\quad(0\le r<R),\\
+x_r&=q_r+B_rz_r\quad(a\le r\le b).
+\end{split}
+\label{eq:reachability}
+\end{equation}
+One solution is weaker than a useful reachable family.
+Family reachability additionally requires a parameterization $\psi(u)$
+with $\psi(u)\in\mathcal I$ and
+$F_{0,a}(\psi(u))=q_a+B_a\eta(u)$ on the stated parameter domain.
+Report the image dimension of $\eta$, the representation degree, and
+the cost of constructing or evaluating $\psi$. A high-degree prefix
+can move the difficulty rather than remove it.
+
+Permutation prefixes give every internal state a unique unrestricted
+preimage. They do not guarantee an admissible preimage or a cheap family
+description. Entry is a linear system only when the prefix and imposed
+constraints are affine; nonlinear prefixes generally yield polynomial
+systems.
+\textcolor{red}{pending text: Prove new reachability or exclusion results,
+or exhibit independently verified improvements beyond prior attacks.
+Reachability itself cannot be claimed as new in view of Slipway.}
+\subsubsection{Nonlinear Trajectory Certificates}
+A proposed extension uses varieties $V_{\mathbb F_p}(I_r)$.
+For every generator $g$ of $I_{r+1}$, membership
+$g\circ R_r\in I_r$ suffices to certify
+$R_r(V_{\mathbb F_p}(I_r))\subseteq V_{\mathbb F_p}(I_{r+1})$:
+evaluate the ideal-membership identity on the source zero set.
+Plain ideal membership need not characterize all finite-field inclusions
+without appropriate vanishing ideals or field equations.
+\textcolor{red}{pending text: Specify a tractable certificate class,
+prove its scope, and compare with nonlinear-subspace methods.}
+\subsection{Certificate-Producing Analysis}
+\label{sec:framework}
+\subsubsection{Finite-Horizon Scanner}
+The proposed algorithm replaces the source scanner's binary security verdict.
+\begin{algorithm}[t]
+\small
+\caption{Finite-horizon inactive-direction certificate}
+\label{alg:subspace_scanner}
+\begin{algorithmic}[1]
+\Require Exact field, interval $[a,b)$, matrices $M_r$, selectors $E_r$
+\State $\Phi\gets I_t$; $H\gets$ empty matrix with $t$ columns
+\For{$r=a,\ldots,b-1$}
+  \State Append rows $E_r\Phi$ to $H$
+  \State $\Phi\gets M_r\Phi$
+\EndFor
+\State $B\gets\operatorname{KernelBasis}(H)$ over $\mathbb F_p$
+\State Verify $HB=0$ and $\operatorname{rank}B=t-\operatorname{rank}H$
+\State \Return $(B,\operatorname{rank}H,\text{interval},\text{model hash})$
+\end{algorithmic}
+\end{algorithm}
+This is an algorithm specification, not a claim of completed software.
+For stationary infinite horizons use~\eqref{eq:stationary}.
+Outputs mean a certified nonzero inactive-direction space, zero such
+space in the specified model, or inconclusive/error.
+Zero kernel is not a general \texttt{SECURE} status.
+
+The lower-right block of $M$ need not be a restriction to $\ker E$,
+because that space need not be invariant. Characteristic polynomial
+factorization may remain diagnostic; kernels of individual factors are
+not assumed to enumerate every relevant invariant subspace.
+Constants still matter for the base trajectory and constrained entry.
+\subsubsection{Witness Checking and Completeness}
+Build~\eqref{eq:reachability} with explicit intermediate-state equations.
+Record the selected elimination or solving method.
+Independently evaluate every solution using the original permutation
+and mode interface. Family identities require symbolic certificates or
+proofs; sampling alone is not a proof. Exclusion claims need a complete
+argument or checkable unsatisfiability certificate.
+Timeout means inconclusive.
+\textcolor{red}{pending text: Implement the checker and independent
+verifier; release accepted and rejected certificates, known-answer tests,
+and verified attack witnesses.}
+\subsubsection{Complexity and Scalability}
+For horizon $h$, classical dense transition products cost $O(ht^3)$
+field operations. If $m=\sum_r|A_r|$, a conservative elimination bound
+for the $m\times t$ stack is $O(mt^2+t^3)$, with
+$O(mt+t^2)$ field-element storage before certificate overhead.
+For one-coordinate activation, $m=h$. These are bounds for a
+straightforward implementation; bit cost depends on the modulus.
+\textcolor{red}{pending text: Measure runtime, memory, certificate size,
+and verification overhead. No sub-millisecond timing or negligible
+integration overhead is claimed.}
+
+
+\section{Adversarial Hash Design}
+\label{sec:adversarial}
+Adversarial Hash Design supplies controlled test instances for the
+methodology in Section~\ref{sec:methodology}. Its role is to challenge
+candidate structures and study cost/attack trade-offs; it is not a
+separate claim that an optimized candidate is secure.
+\subsection{Candidate Generation and Held-Out Evaluation}
+Generate layers or schedules within declared invertibility and cost
+constraints. Separate search/training instances from held-out targets
+and seeds; archive all candidates and selection decisions.
+\subsection{Design Freedom and Fixed-Instance Attacks}
+In a fixed-primitive attack, matrices and constants are fixed in advance.
+In a design-space experiment, disclose whether constants and targets were
+known when selecting a matrix. A constant-dependent matrix construction
+is not a break of a fixed published instance.
+\subsection{Screening Objectives and Selection}
+Search objectives may include field-operation counts, certified inactive
+dimensions, entry cost, and verified solving cost. Passing a screen
+establishes only the screened property.
+\textcolor{red}{pending text: Provide search costs, held-out performance,
+overfitting checks, and a verified Pareto comparison. A concrete new
+permutation is optional and is not recommended for deployment here.}
+
+Every selected candidate should retain the exact matrices, constants,
+schedule, selection seed, search budget, and certificates produced by
+Section~\ref{sec:framework}. Failed entry searches, inconclusive solver
+runs, and rejected witnesses must remain in the experimental record.
+Section~\ref{sec:evaluation} evaluates selected candidates on the same
+tasks and budgets as the declared controls.
+
+
+\section{Evaluation}
+\label{sec:evaluation}
+\subsection{Research Questions and Instances}
+Test whether exact temporal analysis improves on support-only metrics;
+which trails admit constrained entry and exit; whether guided solving
+improves total cost; and how design cost relates to measured attack cost.
+\textcolor{red}{pending text: Answer these questions with certificates
+and matched experiments, including null outcomes.}
+
+Use exhaustive small-field controls, solver-feasible intermediate
+instances, and exact structural checks over production fields.
+The proposed width grid is $t\in\{3,4,8,12,16,24,32\}$ where supported
+by each selected specification; include the BN254 scalar field from
+the source draft.
+\textcolor{red}{pending text: Freeze exact primes, valid exponents,
+round schedules, constants, versions, and modes in a manifest.}
+Small-field attack costs must not be treated as production-field costs.
+
+Include published instances, dense/MDS controls, identity, cyclic-shift,
+block, planted-defect, random, and adversarially selected families.
+Distinguish genuine published matrices from superficially similar replacements.
+A proposed corpus budget is $10^4$ candidates per selected family/width
+cell, subject to pilot feasibility.
+\textcolor{red}{pending text: Fix sample counts, distributions, coefficient
+domains, seeds, rejection rules, and duplicate policy. Report all candidates
+and invertibility rejections; no corpus has been established by the supplied data.}
+
+\subsection{Baselines and Ablations}
+Compare direct algebraic modeling, support propagation, stationary
+invariant tests, finite linear trails, and applicable published attacks
+\cite{poseidonneptune2025,cryptoeprint:2026/306,slipway2026,nonlinear2026}.
+Match fields, round schedules, tasks, target distributions, and limits.
+Ablate changing matrices, activation schedules, entry/output constraints,
+and nonlinear restrictions separately. Match arithmetic cost or S-box
+budget where useful, disclosing unavoidable trade-offs.
+\textcolor{red}{pending text: Reproduce the closest baselines and provide
+paired success, time, and memory comparisons.}
+
+\subsection{Measurements and Results}
+Record kernel dimensions and ranks, interval lengths, reachable-family
+dimensions, entry/output costs, success probabilities, total wall time,
+CPU/GPU time, peak memory, and certificate size. Distinguish exact degree
+from upper bounds and specify variables and reductions.
+Treat timeouts and memory failures as censored outcomes.
+
+\begin{table}[t]
+\centering
+\caption{Planned structural and reachability evaluation. No empirical
+entries are available yet.}
+\label{tab:summary_all}
+\small
+\begin{tabularx}{\columnwidth}{@{}lX@{}}
+\toprule
+Family & Required evidence\\
+\midrule
+Published & \textcolor{red}{pending text: Instance IDs; kernel profiles;
+reachable families}\\
+Dense/MDS & \textcolor{red}{pending text: Matched controls and certificates}\\
+Sparse/block & \textcolor{red}{pending text: Planted and unplanted outcomes}\\
+Adversarial & \textcolor{red}{pending text: Held-out outcomes; search costs}\\
+\bottomrule
+\end{tabularx}
+\end{table}
+\begin{table}[t]
+\centering
+\caption{Planned end-to-end comparisons. No speedups are asserted.}
+\small
+\begin{tabularx}{\columnwidth}{@{}lX@{}}
+\toprule
+Comparison & Required evidence\\
+\midrule
+Direct vs.\ guided & \textcolor{red}{pending text: Success, time, memory}\\
+Prior vs.\ proposed & \textcolor{red}{pending text: Matched tasks and limits}\\
+Entry/exit & \textcolor{red}{pending text: Separate and total costs}\\
+Verification & \textcolor{red}{pending text: Witnesses and checking time}\\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Resources and Initial Three-Month Campaign}
+The discussion describes approximately EUR~30,000 of workstation
+resources and an accelerator with approximately 128~GB memory.
+These are planning inputs, not verified specifications.
+\textcolor{red}{pending text: Record CPU, host RAM, GPU model/memory,
+storage, software versions, arithmetic backends, and compiler settings.}
+Profile symbolic workloads before assuming GPU acceleration.
+
+A proposed twelve-week initial campaign is:
+\begin{enumerate}
+\item Weeks 1--2: freeze definitions, validate exact controls, reproduce
+reference instances, and pilot resource use.
+\item Weeks 3--4: complete scoped certificates, independent checking,
+and baseline reproduction.
+\item Weeks 5--8: run preregistered corpora, entry/exit studies, and paired solves.
+\item Weeks 9--10: run held-out adversarial candidates and ablations.
+\item Weeks 11--12: verify witnesses, analyze uncertainty, and package artifacts.
+\end{enumerate}
+This schedule does not guarantee a major-conference contribution.
+\textcolor{red}{pending text: Freeze per-job limits, concurrency,
+checkpointing, stopping rules, and actual run logs.}
+
+\subsection{Reproducibility}
+Release manifests, parameter files, seeds, versions, raw logs, failures,
+and a witness checker. Separate discovery from independent verification,
+record manual interventions, and report negative results.
+For random corpora report uncertainty conditional on the sampling model;
+optimized samples do not estimate random-population prevalence.
+\textcolor{red}{pending text: Provide repository/archive identifiers,
+license, checksums, reproduction instructions, and an independent rerun.
+No public tool release is claimed.}
+
+
+\section{Discussion \& Limitations}
+\label{sec:discussion}
+\subsection{Meaning and Limits of Certificates}
+An internal affine family may reduce dependence on some variables without
+making admissible inputs easier to find. A zero kernel excludes only
+the specified inactive-direction model. Branch number matters but cannot
+replace multiround, mode-aware analysis; finite trails alone are not
+enough to reject a design.
+\subsection{Protocol and Production-Parameter Limits}
+State whether results concern reduced rounds, chosen matrices, fixed
+published parameters, or a specific mode. Small-instance successes
+\cite{cryptoeprint:2026/150} do not themselves extrapolate to production
+attacks. A permutation weakness does not establish proof forgery.
+The cited Fiat--Shamir study reports negative results for its explored
+approaches~\cite{cryptoeprint:2026/409}, so it cannot support an automatic
+forgery conclusion.
+\textcolor{red}{pending text: Establish any retained protocol consequence
+with a complete attack; otherwise restrict conclusions to verified
+permutation/hash tasks.}
+\subsection{Unresolved Evidence and Scope}
+The proposed evaluation has not supplied measured timings, failure
+rates, validated attack advantages, or completed tool artifacts.
+The linear-algebra propositions concern the stated partial power-map
+model and do not cover all nonlinear trajectory classes.
+\textcolor{red}{pending text: Complete theorem-level positioning,
+implementation validation, matched measurements, and independent
+witness checks before making broader claims. Confirm author details
+and venue anonymization requirements before submission.}
+
+
+\section{Conclusion}
+pending
+
+\printbibliography
+
+
+\appendices
+\section{Notes}
+\textcolor{red}{pending text: Confirm author details and anonymization
+requirements; review proofs; finish related work; freeze manifests;
+complete results; archive artifacts; rewrite abstract and conclusion.}
+
+
+\end{document}
