@@ -14,6 +14,8 @@ Sections
   collapse  : show R_p partial rounds collapse to M^R_p on invariant subspace
   differential : measure output difference bias (non-MDS = 100% predictable)
   zerosum   : run zero-sum distinguisher over a coset of the invariant subspace
+  scan      : Algorithm 1 — deterministic invariant subspace scanner (poly factorization)
+  degree    : track the algebraic degree upper bound (deg-bar) across partial rounds
 
 Examples
 --------
@@ -37,7 +39,8 @@ import argparse
 import sys
 from poseidon.field import Fp
 from poseidon.permutation import PoseidonPermutation
-from poseidon.matrices import MATRIX_NAMES, branch_number
+from poseidon.matrices import MATRIX_NAMES, get_matrix_set, branch_number
+from poseidon.constants import round_constants
 from attacks.invariant_subspace import run_attack_demo, InvariantSubspaceAttack
 from attacks.scenarios import list_scenarios, run_scenario, SCENARIOS
 from attacks.security_proof import SecurityProver
@@ -46,6 +49,12 @@ from attacks.differential import DifferentialDistinguisher
 from attacks.zero_sum import ZeroSumDistinguisher
 from analysis.diffusion import compare_matrices
 from analysis.statistics import compute_stats
+from analysis.degree import (
+    compare_matrices_degree, activation_round,
+    unactivated_degree_trace_full_schedule, expected_vs_actual_degree,
+)
+from analysis.subspace_scanner import analyze_matrix_family, check_power_irreducibility
+from analysis.finite_trail_scanner import unified_criterion, finite_trail_profile, scan_full_round_matrix
 
 
 # ---------------------------------------------------------------------------
@@ -124,7 +133,7 @@ def cmd_attack(args):
 
     results = run_attack_demo(
         t=args.t, r_p=args.r_p, alpha=args.alpha,
-        delta_val=args.delta, verbose=True,
+        delta_val=args.delta, verbose=True, matrix=args.matrix,
     )
 
     if args.verbose:
@@ -206,7 +215,7 @@ def cmd_branch(args):
     print(f"  t={args.t}  |  MDS threshold = t+1 = {args.t + 1}")
     print()
 
-    for name, M in MATRIX_NAMES.items():
+    for name, M in get_matrix_set(args.t).items():
         bn = branch_number(M)
         is_mds = bn >= args.t + 1
         marker = "[MDS]    " if is_mds else "[non-MDS]"
@@ -389,6 +398,123 @@ def cmd_zerosum(args):
 
 
 # ---------------------------------------------------------------------------
+# Subcommand: scan  (Algorithm 1 — AnalyzeSubspace)
+# ---------------------------------------------------------------------------
+
+def cmd_scan(args):
+    _print_separator("═")
+    print(f"INVARIANT SUBSPACE SCANNER (Algorithm 1)  —  t={args.t}, r_p={args.r_p}")
+    _print_separator("═")
+    print("  Minimal/characteristic polynomial decomposition of M_W + coset check")
+    print("  against the round constants (deterministic, no random sampling).")
+    if args.grs21:
+        print(f"  --grs21: also running the GRS21 multi-power irreducibility fast path")
+        print(f"  (chi_(M_W^i) irreducible for some i in 1..{4 * (args.t - 1)}).")
+    print()
+
+    check_powers = 4 * (args.t - 1) if args.grs21 else None
+    results = analyze_matrix_family(args.t, r_p=args.r_p, check_powers=check_powers)
+    for name, r in results.items():
+        status = r["status"]
+        print(f"  [{status:26s}] {name:12s} | invariant subspace dim = {r['dimension']}")
+        if status == "VULNERABLE":
+            print(f"               factor (low-degree first) = {r['factor']}")
+            for v in r["basis"]:
+                print(f"               basis vector = {v}")
+        if status == "SECURE_NO_PROPER_SUBSPACE":
+            first_true = next(i for i, ok in r["grs21_check"]["per_power"].items() if ok)
+            print(f"               chi_(M_W^{first_true}) is irreducible -> no nontrivial "
+                  f"invariant subspace of ANY dimension (GRS21)")
+
+    _print_separator("═")
+
+
+# ---------------------------------------------------------------------------
+# Subcommand: finite_scan  (Algorithm 2 -- unified criterion, RESEARCH_PLAN.md Sec 4)
+# ---------------------------------------------------------------------------
+
+def cmd_finite_scan(args):
+    _print_separator("═")
+    print(f"FINITE TRAIL / FULL-ROUND SCANNER (Algorithm 2)  —  t={args.t}")
+    _print_separator("═")
+    print("  (b) finite-trail dimension profile of M_I (Vitto's unavoidable baseline)")
+    print("  (c) invariant-subspace contiguous-zero-run scan of the full-round matrix")
+    print("      (generalizes Merz & Rodriguez Garcia's tensor-structure finding)\n")
+
+    matrices = get_matrix_set(args.t)
+    M_full = matrices[args.full_matrix]
+    flat_constants = round_constants(args.t, 0, args.r_p)
+    rounds = [flat_constants[i * args.t:(i + 1) * args.t] for i in range(args.r_p)]
+
+    full_report = scan_full_round_matrix(M_full, suspicious_run_threshold=args.run_threshold)
+    print(f"  Full-round matrix '{args.full_matrix}': any_suspicious="
+          f"{full_report['any_suspicious']}  (threshold={full_report['suspicious_run_threshold']}, "
+          f"{full_report['num_invariant_subspaces_found']} invariant subspaces found)")
+    for s in full_report["subspaces"]:
+        flag = "SUSPICIOUS" if s["suspicious"] else "ok        "
+        print(f"    [{flag}] dim={s['subspace_dimension']:2d}  "
+              f"min_weight={s['min_basis_vector_weight']:3d}  "
+              f"max_contiguous_zero_run={s['max_contiguous_zero_run']:3d}")
+    print()
+
+    for name, M_I in matrices.items():
+        r = unified_criterion(M_I, M_full, rounds, check_powers=args.grs21_power,
+                               suspicious_run_threshold=args.run_threshold)
+        verdict = "PASS" if r["passed"] else "FAIL"
+        print(f"  [{verdict}] {name:12s} | infinite_trail={r['infinite_trail_check']['status']:26s} | "
+              f"finite_trail_profile={r['finite_trail_profile']['dimension_profile']} "
+              f"(maximal_rank_growth={r['finite_trail_profile']['maximal_rank_growth']})")
+
+    _print_separator("═")
+
+
+# ---------------------------------------------------------------------------
+# Subcommand: degree  (algebraic degree upper bound, deg-bar)
+# ---------------------------------------------------------------------------
+
+def cmd_degree(args):
+    _print_separator("═")
+    print(f"ALGEBRAIC DEGREE UPPER BOUND  —  t={args.t}, r_p={args.r_p}, alpha={args.alpha}")
+    _print_separator("═")
+
+    traces = compare_matrices_degree(args.t, r_p=args.r_p, alpha=args.alpha)
+    matrix_set = get_matrix_set(args.t)
+
+    header = f"{'Round':>7}  " + "  ".join(f"{n:>15}" for n in traces)
+    print(header)
+    _print_separator()
+    for r in range(args.r_p + 1):
+        row = f"{r:>7}  " + "  ".join(f"{traces[n][r]:>15}" for n in traces)
+        print(row)
+
+    print()
+    for name, M in matrix_set.items():
+        act1 = activation_round(M, args.t, args.r_p, args.alpha, coord=1)
+        act_last = activation_round(M, args.t, args.r_p, args.alpha, coord=args.t - 1)
+        s1 = "never (frozen)" if act1 is None else f"round {act1}"
+        s_last = "never (frozen)" if act_last is None else f"round {act_last}"
+        print(f"  {name:12s} | coordinate-1 activation: {s1:15s} | coordinate-{args.t-1} (last) activation: {s_last}")
+
+    if args.full:
+        _print_separator()
+        print(f"\n  Full schedule (r_f={args.r_f} full + r_p={args.r_p} partial + full), "
+              f"full-round matrix = mds:")
+        full_matrix = matrix_set["mds"]
+        for name, M in matrix_set.items():
+            trace = unactivated_degree_trace_full_schedule(full_matrix, M, args.t, args.r_f, args.r_p, args.alpha)
+            r = expected_vs_actual_degree(full_matrix, M, args.t, args.r_f, args.r_p, args.alpha)
+            print(f"    {name:12s} | after full prefix (round {args.r_f//2}): {trace[args.r_f//2]:>10} | "
+                  f"expected={r['expected']:.3e}  achieved={r['achieved_upper_bound']:.3e}  ratio={r['collapse_ratio']}")
+        print("\n  Note: this is a worst-case upper bound (deg-bar) — it cannot by itself show")
+        print("  Vitto 2026/1579's degree COLLAPSE (3^10 vs 3^28), which relies on real symbolic")
+        print("  cancellation along a constructed constrained-input family, not a generic bound.")
+        print("  It CAN and does show full-round degree saturation (round 4 above), confirming the")
+        print("  full-round prefix already maximizes the naive bound before the partial rounds start.")
+
+    _print_separator("═")
+
+
+# ---------------------------------------------------------------------------
 # Main parser
 # ---------------------------------------------------------------------------
 
@@ -401,17 +527,28 @@ def build_parser():
     )
 
     # Shared args
+    # NOTE: --r_f is deliberately NOT here. argparse's `parents=` reuses the
+    # same Action OBJECT across every subparser built from it, so an earlier
+    # bug (`p_zs.set_defaults(func=cmd_zerosum, r_f=0)` below) was silently
+    # mutating --r_f's default to 0 for EVERY subcommand, not just zerosum
+    # (verified: `sub.add_parser(..., parents=[shared])._actions` for --r_f
+    # `is` the same object across all subparsers). Each subparser below adds
+    # its own --r_f instead, so a per-command default can never leak.
     shared = argparse.ArgumentParser(add_help=False)
     shared.add_argument("--t",     type=int, default=3,  help="State width (default 3)")
-    shared.add_argument("--r_f",   type=int, default=8,  help="Full rounds (default 8)")
     shared.add_argument("--r_p",   type=int, default=57, help="Partial rounds (default 57)")
     shared.add_argument("--alpha", type=int, default=5,  help="S-box exponent (default 5)")
     shared.add_argument("--delta", type=int, default=4,  help="Difference value (default 4)")
+
+    def _add_rf(subparser, default=8):
+        subparser.add_argument("--r_f", type=int, default=default,
+                                help=f"Full rounds (default {default})")
 
     sub = parser.add_subparsers(dest="command", required=True)
 
     # permute
     p_perm = sub.add_parser("permute", parents=[shared], help="Run Poseidon1 permutation")
+    _add_rf(p_perm)
     p_perm.add_argument("--input",        nargs="+", type=int, default=[1, 2, 3],
                         help="Input state (space-separated integers)")
     p_perm.add_argument("--matrix",       choices=list(MATRIX_NAMES), default="mds",
@@ -424,25 +561,32 @@ def build_parser():
 
     # attack
     p_atk = sub.add_parser("attack", parents=[shared], help="Run invariant subspace attack demo")
+    _add_rf(p_atk)
+    p_atk.add_argument("--matrix", choices=list(MATRIX_NAMES), default=None,
+                       help="Restrict the demo to a single matrix (default: compare all four)")
     p_atk.add_argument("--verbose", action="store_true",
                        help="Print per-round subspace membership")
     p_atk.set_defaults(func=cmd_attack)
 
     # diffusion
     p_diff = sub.add_parser("diffusion", parents=[shared], help="Print diffusion table")
+    _add_rf(p_diff)
     p_diff.set_defaults(func=cmd_diffusion)
 
     # stats
     p_stat = sub.add_parser("stats", parents=[shared], help="Print security statistics")
+    _add_rf(p_stat)
     p_stat.set_defaults(func=cmd_stats)
 
     # branch
     p_br = sub.add_parser("branch", parents=[shared], help="Print branch numbers")
+    _add_rf(p_br)
     p_br.set_defaults(func=cmd_branch)
 
     # scenario
     p_sc = sub.add_parser("scenario", parents=[shared],
                            help="Run a predefined attack scenario")
+    _add_rf(p_sc)
     p_sc.add_argument("--name", type=str, default=None,
                       help="Scenario name to run")
     p_sc.add_argument("--list", action="store_true",
@@ -452,6 +596,7 @@ def build_parser():
     # prove
     p_pv = sub.add_parser("prove", parents=[shared],
                            help="Formally prove or disprove security of a matrix")
+    _add_rf(p_pv)
     p_pv.add_argument("--matrix", choices=list(MATRIX_NAMES), default="mds",
                       help="Matrix to analyze")
     p_pv.add_argument("--scan",  action="store_true",
@@ -463,6 +608,7 @@ def build_parser():
     # collapse
     p_cl = sub.add_parser("collapse", parents=[shared],
                            help="Show partial rounds collapse to M^R_p on invariant subspace")
+    _add_rf(p_cl)
     p_cl.add_argument("--matrix",  choices=list(MATRIX_NAMES), default="identity",
                       help="Matrix for partial rounds")
     p_cl.add_argument("--samples", type=int, default=5,
@@ -474,6 +620,7 @@ def build_parser():
     # differential
     p_df = sub.add_parser("differential", parents=[shared],
                            help="Measure output difference bias (non-MDS = 100% predictable)")
+    _add_rf(p_df)
     p_df.add_argument("--matrix",  choices=list(MATRIX_NAMES), default="identity",
                       help="Matrix for partial rounds")
     p_df.add_argument("--samples", type=int, default=20,
@@ -485,13 +632,44 @@ def build_parser():
     # zerosum
     p_zs = sub.add_parser("zerosum", parents=[shared],
                            help="Run zero-sum distinguisher over coset of invariant subspace")
+    _add_rf(p_zs, default=0)  # default partial-only, to isolate the invariant-subspace effect
     p_zs.add_argument("--matrix",     choices=list(MATRIX_NAMES), default="identity",
                       help="Matrix for partial rounds")
     p_zs.add_argument("--coset-size", type=int, default=6, dest="coset_size",
                       help="Number of coset elements to sum")
     p_zs.add_argument("--trials",     type=int, default=3,
                       help="Number of random-base trials (0 to skip)")
-    p_zs.set_defaults(func=cmd_zerosum, r_f=0)  # default partial-only for clear distinction
+    p_zs.set_defaults(func=cmd_zerosum)
+
+    # scan (Algorithm 1)
+    p_scan = sub.add_parser("scan", parents=[shared],
+                             help="Run the Algorithm 1 invariant-subspace scanner "
+                                  "(minimal polynomial decomposition + coset check)")
+    _add_rf(p_scan)
+    p_scan.add_argument("--grs21", action="store_true",
+                        help="Also run the cheap GRS21 multi-power irreducibility fast path")
+    p_scan.set_defaults(func=cmd_scan)
+
+    # finite_scan (Algorithm 2)
+    p_fscan = sub.add_parser("finite_scan", parents=[shared],
+                              help="Run the Algorithm 2 unified criterion "
+                                   "(finite-trail profile + full-round invariant-subspace scan)")
+    p_fscan.add_argument("--full-matrix", choices=list(MATRIX_NAMES), default="mds", dest="full_matrix",
+                         help="Matrix to use for full rounds (default mds)")
+    p_fscan.add_argument("--run-threshold", type=int, default=None, dest="run_threshold",
+                         help="Suspicious contiguous-zero-run length (default t//4)")
+    p_fscan.add_argument("--grs21-power", type=int, default=None, dest="grs21_power",
+                         help="Max power for the GRS21 fast path in Algorithm 1 (default: skip it)")
+    p_fscan.set_defaults(func=cmd_finite_scan)
+
+    # degree
+    p_deg = sub.add_parser("degree", parents=[shared],
+                            help="Track the algebraic degree upper bound (deg-bar) per round")
+    _add_rf(p_deg)
+    p_deg.add_argument("--full", action="store_true",
+                       help="Also track the degree-bar through the full-round prefix/suffix "
+                            "(Step 1.1 of RESEARCH_PLAN.md), not just the partial rounds")
+    p_deg.set_defaults(func=cmd_degree)
 
     return parser
 

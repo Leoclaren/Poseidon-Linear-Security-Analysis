@@ -7,7 +7,7 @@ in the difference after r rounds, given an initial difference Delta.
 
 from poseidon.field import Fp
 from poseidon.permutation import PoseidonPermutation
-from poseidon.matrices import MATRIX_NAMES
+from poseidon.matrices import get_matrix_set
 
 
 def diffusion_coefficient(state_diff: list) -> float:
@@ -76,7 +76,7 @@ def compare_matrices(
     dict mapping matrix_name -> list of (round, D(r))
     """
     if matrices is None:
-        matrices = list(MATRIX_NAMES.keys())
+        matrices = list(get_matrix_set(t).keys())
 
     return {
         name: track_diffusion(

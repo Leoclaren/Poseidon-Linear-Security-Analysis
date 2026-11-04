@@ -12,7 +12,7 @@ This module:
 """
 
 from poseidon.field import Fp, P
-from poseidon.matrices import matrix_mul, MATRIX_NAMES
+from poseidon.matrices import matrix_mul, get_matrix_set
 from poseidon.permutation import PoseidonPermutation
 
 
@@ -46,13 +46,13 @@ class LinearCollapseAttack:
     just multiply by M^R_p once.
     """
 
-    def __init__(self, t: int = 3, r_p: int = 6, alpha: int = 5, matrix: str = "identity"):
+    def __init__(self, t: int = 3, r_p: int = 6, alpha: int = 5, matrix: str = "identity", matrix_override=None):
         self.t = t
         self.r_p = r_p
         self.alpha = alpha
         self.matrix_name = matrix
-        self.M = MATRIX_NAMES[matrix]
-        self.perm = PoseidonPermutation(t=t, r_f=0, r_p=r_p, alpha=alpha, matrix=matrix)
+        self.M = matrix_override if matrix_override is not None else get_matrix_set(t)[matrix]
+        self.perm = PoseidonPermutation(t=t, r_f=0, r_p=r_p, alpha=alpha, matrix=matrix, partial_matrix=matrix_override)
         self.M_power = matrix_pow(self.M, r_p)
 
     def apply_power(self, delta: list) -> list:

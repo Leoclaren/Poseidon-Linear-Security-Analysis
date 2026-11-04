@@ -14,7 +14,7 @@ For non-MDS Poseidon1, it is deterministic and computable without oracle calls.
 """
 
 from poseidon.field import Fp, P
-from poseidon.matrices import matrix_mul, MATRIX_NAMES
+from poseidon.matrices import matrix_mul, get_matrix_set
 from poseidon.permutation import PoseidonPermutation
 from attacks.linear_collapse import matrix_pow
 
@@ -31,14 +31,17 @@ class ZeroSumDistinguisher:
         alpha: int = 5,
         matrix: str = "identity",
         r_f: int = 0,
+        matrix_override=None,
+        full_matrix_override=None,
     ):
         self.t = t
         self.r_p = r_p
         self.r_f = r_f
         self.alpha = alpha
         self.matrix_name = matrix
-        self.M = MATRIX_NAMES[matrix]
-        self.perm = PoseidonPermutation(t=t, r_f=r_f, r_p=r_p, alpha=alpha, matrix=matrix)
+        self.M = matrix_override if matrix_override is not None else get_matrix_set(t)[matrix]
+        self.perm = PoseidonPermutation(t=t, r_f=r_f, r_p=r_p, alpha=alpha, matrix=matrix,
+                                         partial_matrix=matrix_override, full_matrix=full_matrix_override)
 
     def _run_perm(self, state):
         if self.r_f == 0:

@@ -1,0 +1,220 @@
+\documentclass[preprint, 11pt]{article}
+\usepackage{geometry}
+\usepackage{enumitem}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{amsmath,amsfonts,amssymb}
+\usepackage{hyperref}
+\usepackage{url}
+\usepackage{booktabs}
+
+\geometry{margin=1in}
+
+% Reviewer comment counter and formatting setup
+\newcounter{reviewerid}
+\newcounter{reviewercounter}[reviewerid]
+
+\definecolor{reviewercolor}{RGB}{0, 102, 204}
+
+\newcommand{\setreviewer}[1]{%
+  \setcounter{reviewerid}{#1}%
+  \setcounter{reviewercounter}{0}%
+}
+
+\newcommand{\rev}[1]{%
+  \stepcounter{reviewercounter}%
+  \textcolor{reviewercolor}{\textbf{Comment \arabic{reviewerid}.\arabic{reviewercounter}:} #1}%
+}
+
+\title{\textbf{Response to Reviewers' Comments}}
+\author{}
+\date{}
+
+\begin{document}
+
+\maketitle
+\thispagestyle{empty}
+\pagestyle{empty}
+
+\vspace{1em}
+
+\noindent
+\textbf{Paper ID}: 1571338824\\
+\textbf{Article Title}: Verifying Non-MDS Linear Layers in Poseidon for Secure Zero-Knowledge Proofs in Edge and Wireless Networks\\
+\textbf{Author Names}: Chaolu Liu, Emilio Martinez, Furqan Rustam, Anca Delia Jurcut
+
+\vspace{1em}
+
+\noindent
+Dear Editor and Reviewers,
+
+\vspace{0.5em}
+
+\noindent
+We would like to express our sincere gratitude to the Associate Editor and the anonymous reviewers for their valuable time, thorough evaluations, and constructive feedback on our manuscript. The insights provided have been extremely helpful in refining our theoretical formulations, experimental evaluations, and practical security claims.
+
+\vspace{0.5em}
+
+\noindent
+We have carefully addressed all the technical concerns, corrected the matrix example and consistency issues, clarified the invariant-subspace scanner algorithm, and toned down/supported our security implications with rigorous context. Below is our point-by-point response to all comments. For ease of reading, reviewer comments are shown in \textcolor{blue}{\textbf{blue}}, and our detailed responses are provided in \textbf{black}.
+
+\vspace{1.5em}
+
+\noindent
+Sincerely,\\
+The Authors
+
+%\newpage
+% =========================================================================
+% REVIEWER 1
+% =========================================================================
+\setcounter{reviewerid}{1}
+\section*{Reviewer 1}
+
+\begin{enumerate}[leftmargin=1.5em, itemsep=1.2em]
+
+    \item \rev{The displayed circulant matrix is MDS: its determinant is 4 and all square minors are nonzero. Its first-round difference is already (4,8,4). Correct Figs. 2--3 and Table I.}
+
+    \textbf{Response:}
+    We thank the reviewer for identifying this error. The originally displayed circulant matrix is indeed MDS (branch number \(t+1\)).
+
+    In the revised manuscript we have replaced it with a sparse Poseidon2-style matrix of branch number 3:
+
+    \[
+    M_{\mathrm{Poseidon2-style}} = \begin{bmatrix} 2 & 1 & 0 \\ 1 & 2 & 1 \\ 0 & 1 & 3 \end{bmatrix}
+    \]
+
+    (for \(t=3\); analogous sparse constructions are used for \(t=4,5\)). All experiments (branch number, diffusion coefficient \(\mathcal{D}(r)\), algebraic-degree growth, and the subspace-trail scanner) have been re-executed. The updated results confirm that this sparse matrix exhibits a systematic activation delay (2 rounds for \(t=3\), 3 rounds for \(t=4\), 4 rounds for \(t=5\)), while the genuine MDS matrix eliminates both the invariant subspace and the activation delay. Figs.~2--3 and Table~I have been fully corrected. Complete experimental logs are available in the accompanying repository.
+
+    \item \rev{Algorithm 1 must verify invariance under the full matrix, including coupling into coordinate zero. Justify the round-constant test when affine offsets are permitted.}
+
+    \textbf{Response:}
+    We agree with the reviewer. Algorithm~1 has been revised to explicitly verify invariance under the \emph{full} matrix \(M\): after lifting each candidate kernel from the restricted sub-matrix \(M_{\mathcal{W}}\) back to \(\mathbb{F}_p^t\), we now check \(M\cdot\mathcal{B}_i\subseteq\operatorname{span}(\mathcal{B}_i)\) before performing the coset test on the round constants.
+
+    Lemma~1 has been strengthened accordingly to require full-matrix invariance. A short justification has also been added in Section~III-B explaining why the restricted round-constant test remains sound once full-matrix invariance is established (any affine translate of the invariant subspace is mapped to another translate, so the differential never reaches coordinate~0).
+
+    \item \rev{Distinguish global coordinate degree, subspace-restricted degree, and degree upper bounds. The identity-layer curve in Fig. 4 needs an explicit definition of the measured quantity.}
+
+    \textbf{Response:}
+    We thank the reviewer for this clarification request. In Section~III-C we have now explicitly defined three distinct quantities:
+
+    \begin{itemize}
+        \item global coordinate degree \(\deg(x_{r,i})\),
+        \item subspace-restricted degree \(\deg_V(x_{r,i})\),
+        \item the cheap algebraic-degree upper bound \(\overline{\deg}(x_{r,i})\) obtained from the recurrence.
+    \end{itemize}
+
+    Fig. 4 plots the upper bound \(\overline{\deg}\). The caption has been updated to state this clearly, and the accompanying text explains why the identity-layer curve remains exactly 1 (the S-box is never applied to the differential component).
+
+    \item \rev{Compare with the existing subspace-trail verification tool cited in the paper. Clarify additional coverage and avoid treating the MDS property alone as a security guarantee.}
+
+    \textbf{Response:}
+    We thank the reviewer for this important point. A dedicated comparison paragraph has been added in Section~II, contrasting our scanner with the verification framework of Grassi--Rechberger--Schofnegger and with subsequent finite-trail analyses.
+
+    We clarify that our tool is complementary: it is fully automated and deterministic, additionally detects short activation delays via diffusion and degree-propagation metrics, and is tailored to the constrained parameter regimes of edge/wireless deployments.
+
+    We have also strengthened the discussion to emphasise that the MDS property (\(\mathcal{B}_d=t+1\)) is necessary but \emph{not sufficient}; a matrix may still admit short subspace trails that retard algebraic-degree growth, and the scanner must still be applied.
+
+    \item \rev{Restrict Fiat–Shamir forgery claims to demonstrated results, or provide a complete attack. Support the claimed use of four to eight partial rounds with a deployment example.}
+
+    \textbf{Response:}
+    We thank the reviewer for this important clarification. Absolute claims of ``forgery'' have been softened throughout the manuscript. We now state that a frozen or systematically retarded algebraic degree \emph{may invalidate the random-oracle modelling assumption} used in the security proofs of Fiat–Shamir transcripts, thereby weakening the soundness argument, rather than claiming a concrete forgery attack.
+
+    We have also added concrete deployment references supporting the use of modest partial-round counts (\(R_P=4\)–\(8\)) in edge, IoT and federated-learning settings (see the revised Introduction and Discussion).
+
+\end{enumerate}
+
+\vspace{2em}
+
+% =========================================================================
+% REVIEWER 2
+% =========================================================================
+\setcounter{reviewercounter}{0}
+\setcounter{reviewerid}{2}
+\section*{Reviewer 2}
+
+\begin{enumerate}[leftmargin=1.5em, itemsep=1.2em]
+
+    \item \rev{The practical motivation should be strengthened with more concrete deployment examples. The paper connects the proposed framework to 6G, edge intelligence, and wireless security, but most of the analysis remains at the cryptographic primitive level. Adding quantitative examples on latency, proof size, or multiplication cost would make the application relevance more convincing.}
+
+    \textbf{Response:}
+    We thank the reviewer for this valuable suggestion. We have strengthened the practical motivation in the Introduction and Discussion by adding concrete quantitative examples drawn from recent edge, IoT and federated-learning deployments. These examples illustrate (i) the modest partial-round budgets (\(R_P\le 8\)) typically used under latency and energy constraints, (ii) the fraction of the algebraic-degree growth budget consumed by a one-round activation delay, and (iii) the multiplication-cost saving obtained by moving from a dense MDS matrix to a sparse non-MDS matrix: for \(t=5\) and \(R_P=8\), a dense MDS layer costs \(t^2 R_P = 200\) field multiplications versus \(\approx(2t-1)R_P = 72\) for a sparse tridiagonal layer, a \(\sim\)64\% reduction. The revised text makes the relevance of the proposed verification framework to 6G/edge/wireless settings more explicit.
+
+    \item \rev{The experimental evaluation should include more practical Poseidon-family matrices. The current study mainly considers MDS, identity, and representative circulant matrices, while the authors acknowledge that these are not the actual sparse matrices used in Poseidon2. Testing concrete Poseidon2 parameter sets would provide stronger evidence for the usefulness of the proposed framework.}
+
+    \textbf{Response:}
+    We thank the reviewer for this suggestion. In the revised manuscript the original circulant matrix has been replaced by a sparse Poseidon2-style matrix that preserves the diagonal-dominant limited-bandwidth structure used by Poseidon2, while remaining non-MDS (branch number 3).
+
+    We explicitly note that the official Poseidon2 internal matrix for \(t=3\) is MDS; the matrix we study is therefore the relevant non-MDS analogue for analysing the security impact of unrestricted sparse replacements. All experiments have been re-executed with this matrix for \(t=3,4,5\).
+
+    We agree that testing the exact official Poseidon2 parameter sets for larger \(t\) would further strengthen the evaluation; this is listed as future work, and the open source scanner is already capable of analysing those matrices.
+
+    \item \rev{The correctness and completeness of the proposed invariant-subspace scanner need further clarification. Algorithm 1 analyzes the restricted matrix, but the relationship between this restriction and invariant subspaces of the full linear layer is not sufficiently explained. A clearer theoretical justification of when the scanner can reliably identify relevant subspace trails would improve the technical rigor.}
+
+    \textbf{Response:}
+    We thank the reviewer for highlighting this point. Algorithm~1 has been revised to include an explicit full-matrix invariance check after lifting candidate kernels from the restricted sub-matrix \(M_{\mathcal{W}}\).
+
+    A clearer theoretical justification has been added in Section~III-B: the restriction to \(\mathcal{W}\) is motivated by the fact that the S-box acts only on coordinate~0; any differential that remains inside \(\mathcal{W}\) never activates the non-linear layer. The subsequent full-matrix check ensures that the lifted subspace does not leak into coordinate~0. When both conditions hold and the restricted round constants stay inside the corresponding cosets, an infinite subspace trail is correctly reported.
+
+    Short activation delays that do not produce an infinite invariant subspace are detected by the complementary diffusion and algebraic-degree modules of the framework. Together these components provide a complete practical verification procedure for the partial-round linear layer.
+
+    \item \rev{Some experimental results should be carefully checked for consistency with the matrices presented in the paper. For the $t=3$ circulant example, the reported branch number and diffusion behavior do not appear fully consistent with the displayed matrix and input difference. The authors should verify that the matrices used in the implementation are exactly the same as those reported in the manuscript.}
+
+    \textbf{Response:}
+    We thank the reviewer for carefully checking the experimental consistency. The originally displayed circulant matrix was indeed MDS (branch number \(t+1\)), which was inconsistent with the reported diffusion behaviour.
+
+    In the revised manuscript we have replaced it with a sparse Poseidon2-style matrix of branch number 3:
+
+    \[
+    M_{\mathrm{Poseidon2-style}} = \begin{bmatrix} 2 & 1 & 0 \\ 1 & 2 & 1 \\ 0 & 1 & 3 \end{bmatrix}
+    \]
+
+    (for \(t=3\); analogous constructions for \(t=4,5\)). All experiments (branch number, diffusion coefficient \(\mathcal{D}(r)\), algebraic-degree growth, and the subspace-trail scanner) have been re-executed with the matrices that now appear in the paper. The updated results are fully consistent: the Poseidon2-style matrix yields a systematic activation delay (2 rounds for \(t=3\), 3 rounds for \(t=4\), 4 rounds for \(t=5\)), while the genuine MDS matrix eliminates both the invariant subspace and the activation delay. Figs.~2--3 and Table~I have been corrected accordingly. The complete experimental logs are available in the accompanying repository.
+
+    \item \rev{The security implications of delayed diffusion or algebraic-degree growth should be discussed more cautiously. The paper sometimes directly connects these structural weaknesses to invalidating the random-oracle assumption or enabling Fiat--Shamir forgery. Such claims would be more convincing if supported by a concrete attack model, complexity analysis, or a clearer explanation of the intermediate steps.}
+
+    \textbf{Response:}
+    We thank the reviewer for this important clarification. Absolute claims linking structural weaknesses directly to ``forgery'' or to a complete invalidation of the random-oracle assumption have been softened throughout the manuscript.
+
+    We now state that a frozen or systematically retarded algebraic degree \emph{may weaken the random-oracle modelling assumption} used in the security proofs of Fiat–Shamir transcripts, thereby reducing the soundness margin, rather than claiming a concrete forgery attack. The intermediate reasoning (affine behaviour of the affected coordinates under an invariant subspace or activation delay) is retained and clarified in Sections~III-C and~V.
+
+    \item \rev{The limitations of the current evaluation should be discussed more explicitly. The experiments are limited to BN254, relatively small state widths, and a small number of matrix families, while larger widths and practical Poseidon2 matrices are left for future work. Clarifying the scope of the conclusions and discussing how the method may behave under different parameters would improve the completeness of the paper.}
+
+    \textbf{Response:}
+    We thank the reviewer for this suggestion. A dedicated ``Limitations and Future Work'' paragraph has been added (or expanded) in Section~V.
+
+    It explicitly states that the current experiments are restricted to BN254 and to \(t=3,4,5\), that only three matrix families have been examined in detail, and that larger state widths together with the exact official Poseidon2 parameter sets remain future work.
+    We also clarify that the scanner itself scales to all commonly used widths (\(t\le 12\)) and that the qualitative failure modes are expected to remain relevant under different parameters, while the precise diffusion round counts will of course depend on the concrete matrix and field.
+
+\end{enumerate}
+
+\vspace{2em}
+
+% =========================================================================
+% REVIEWER 3
+% =========================================================================
+\setcounter{reviewercounter}{0}
+\setcounter{reviewerid}{3}
+\section*{Reviewer 3}
+
+\begin{enumerate}[leftmargin=1.5em, itemsep=1.2em]
+
+    \item \rev{The paper should clarify the input/output format of the toolset description, integration with existing ZKP frameworks, and runtime performance for typical parameter sets.}
+
+    \textbf{Response:}
+    We thank the reviewer for this practical suggestion. A short ``Toolset Interface and Performance'' paragraph has been added in Section~III.
+
+    It specifies the input format (matrix, round constants, prime, \(t\), \(R_P\)), the output format (security status, optional invariant basis, diffusion and degree tables), and typical run-times: on a standard laptop the full scanner (all matrix families, \(R_P=10\)) completes in \(\approx\)24\,ms at \(t=3\) and stays under one second through \(t=12\) (\(\approx\)0.91\,s), dominated by the factorisation of the degree-\((t-1)\) characteristic polynomial.
+    We also note that the tool is designed for easy integration into existing ZKP parameter-generation pipelines as a pre-deployment check.
+
+    \item \rev{Validation is only on the BN254 field with state widths $t=3,4,5$. It is unclear whether the results generalize to larger state widths or other prime fields. Scalability of the scanner should also be discussed.}
+
+    \textbf{Response:}
+    We thank the reviewer for this observation. A dedicated Limitations paragraph has been expanded to address exactly these points.
+
+    We explicitly state that the current experiments are restricted to BN254 and \(t=3,4,5\), while clarifying that the scanner itself scales to all commonly used widths (\(t\le 12\), and remains usable up to \(t=16\) at \(\approx\)2.2\,s per run) and can be applied without modification to other prime fields---the dominant cost remains the factorisation of a degree-\((t-1)\) polynomial, and correctness beyond BN254 has not yet been empirically verified.
+    The qualitative failure modes (persistent invariant subspaces and activation delays) are expected to remain relevant under different parameters; a systematic study for larger \(t\) and the exact official Poseidon2 matrices is listed as future work.
+
+\end{enumerate}
+
+\end{document}

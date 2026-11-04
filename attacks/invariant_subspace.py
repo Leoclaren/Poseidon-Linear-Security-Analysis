@@ -10,7 +10,7 @@ rounds then collapse to a purely linear map — no nonlinear security.
 
 from poseidon.field import Fp
 from poseidon.permutation import PoseidonPermutation
-from poseidon.matrices import matrix_mul, weight, branch_number, MATRIX_NAMES
+from poseidon.matrices import matrix_mul, weight, branch_number, get_matrix_set
 
 
 class InvariantSubspaceAttack:
@@ -27,7 +27,7 @@ class InvariantSubspaceAttack:
         self.r_p = r_p
         self.alpha = alpha
         self.matrix_name = matrix
-        self.M = MATRIX_NAMES[matrix]
+        self.M = get_matrix_set(t)[matrix]
         self.perm = PoseidonPermutation(t=t, r_f=0, r_p=r_p, alpha=alpha, matrix=matrix)
 
     def check_invariant_subspace(self, delta_val: int = 4) -> dict:
@@ -101,14 +101,19 @@ class InvariantSubspaceAttack:
         }
 
 
-def run_attack_demo(t: int = 3, r_p: int = 6, alpha: int = 5, delta_val: int = 4, verbose: bool = True) -> dict:
+def run_attack_demo(t: int = 3, r_p: int = 6, alpha: int = 5, delta_val: int = 4,
+                     verbose: bool = True, matrix: str = None) -> dict:
     """
     Run the invariant subspace attack demo comparing MDS vs non-MDS matrices.
     Returns a results dict suitable for analysis/plotting.
+
+    If `matrix` is given, only that matrix is run (useful when scripting a
+    sweep over matrices one at a time); otherwise all four are compared.
     """
     results = {}
+    matrix_names = [matrix] if matrix is not None else ["mds", "identity", "circulant", "poseidon2"]
 
-    for name in ["mds", "identity", "circulant"]:
+    for name in matrix_names:
         atk = InvariantSubspaceAttack(t=t, r_p=r_p, alpha=alpha, matrix=name)
         subspace_result = atk.check_invariant_subspace(delta_val=delta_val)
         prediction_result = atk.attack_predict_output_diff(

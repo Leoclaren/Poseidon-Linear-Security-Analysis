@@ -15,19 +15,22 @@ import numpy as np
 
 from analysis.diffusion import compare_matrices
 from analysis.statistics import compute_stats
-from poseidon.matrices import MATRIX_NAMES, branch_number
+from analysis.degree import compare_matrices_degree
+from poseidon.matrices import get_matrix_set, branch_number
 
 
 COLORS = {
     "mds": "#2ecc71",        # green  = secure
-    "identity": "#e74c3c",   # red    = vulnerable
+    "identity": "#e74c3c",   # red    = vulnerable (persistent invariant subspace)
     "circulant": "#e67e22",  # orange = non-MDS
+    "poseidon2": "#f1c40f",  # yellow = non-MDS, activation delay only
 }
 
 LABELS = {
     "mds": "MDS (secure)",
     "identity": "Identity / non-MDS (vulnerable)",
     "circulant": "Circulant / non-MDS",
+    "poseidon2": "Poseidon2-style (activation delay)",
 }
 
 
@@ -70,8 +73,9 @@ def plot_diffusion(t=3, r_p=10, alpha=5, delta_val=4, save=None):
 # ---------------------------------------------------------------------------
 
 def plot_branch_numbers(t=3, save=None):
-    names = list(MATRIX_NAMES.keys())
-    bns   = [branch_number(MATRIX_NAMES[n]) for n in names]
+    matrix_set = get_matrix_set(t)
+    names = list(matrix_set.keys())
+    bns   = [branch_number(matrix_set[n]) for n in names]
     threshold = t + 1
 
     fig, ax = plt.subplots(figsize=(7, 4))
@@ -104,7 +108,39 @@ def plot_branch_numbers(t=3, save=None):
 
 
 # ---------------------------------------------------------------------------
-# Plot 3: Statistics table / heatmap
+# Plot 3: Algebraic degree upper bound (Figure 3 of the paper)
+# ---------------------------------------------------------------------------
+
+def plot_degree(t=3, r_p=15, alpha=5, save=None):
+    data = compare_matrices_degree(t=t, r_p=r_p, alpha=alpha)
+
+    fig, ax = plt.subplots(figsize=(9, 5))
+    for name, trace in data.items():
+        rounds = list(range(len(trace)))
+        ax.plot(rounds, trace, marker="o", linewidth=2,
+                color=COLORS[name], label=LABELS[name])
+
+    ax.set_yscale("log")
+    ax.set_xlabel("Round", fontsize=12)
+    ax.set_ylabel(r"Algebraic degree upper bound  $\overline{\deg}$ (log scale)", fontsize=12)
+    ax.set_title(
+        f"Algebraic degree upper bound over {r_p} partial rounds  |  t={t}, α={alpha}",
+        fontsize=13,
+    )
+    ax.set_xticks(range(r_p + 1))
+    ax.legend(fontsize=10)
+    ax.grid(True, alpha=0.3, which="both")
+
+    fig.tight_layout()
+    if save:
+        fig.savefig(save, dpi=150)
+        print(f"Saved: {save}")
+    else:
+        plt.show()
+
+
+# ---------------------------------------------------------------------------
+# Plot 4: Statistics table / heatmap
 # ---------------------------------------------------------------------------
 
 def plot_stats_overview(t=3, r_p=6, alpha=5, delta_val=4, save=None):
@@ -199,8 +235,9 @@ def plot_all(t=3, r_p=10, alpha=5, delta_val=4, save=None):
 
     # --- subplot 2: branch numbers ---
     ax2 = fig.add_subplot(2, 2, 2)
-    names = list(MATRIX_NAMES.keys())
-    bns   = [branch_number(MATRIX_NAMES[n]) for n in names]
+    matrix_set = get_matrix_set(t)
+    names = list(matrix_set.keys())
+    bns   = [branch_number(matrix_set[n]) for n in names]
     ax2.bar([n for n in names], bns, color=[COLORS[n] for n in names],
             edgecolor="black", linewidth=0.8)
     ax2.axhline(t + 1, color="steelblue", linestyle="--", linewidth=2,
@@ -269,7 +306,7 @@ def plot_all(t=3, r_p=10, alpha=5, delta_val=4, save=None):
 
 def main():
     parser = argparse.ArgumentParser(description="Poseidon1 analysis plots")
-    parser.add_argument("--mode", choices=["diffusion", "branch", "stats", "all"],
+    parser.add_argument("--mode", choices=["diffusion", "branch", "degree", "stats", "all"],
                         default="all", help="Which plot to show")
     parser.add_argument("--t", type=int, default=3, help="State width")
     parser.add_argument("--r_p", type=int, default=10, help="Number of partial rounds")
@@ -285,6 +322,8 @@ def main():
         plot_diffusion(**kwargs)
     elif args.mode == "branch":
         plot_branch_numbers(t=args.t, save=args.save)
+    elif args.mode == "degree":
+        plot_degree(t=args.t, r_p=args.r_p, alpha=args.alpha, save=args.save)
     elif args.mode == "stats":
         plot_stats_overview(**kwargs)
     elif args.mode == "all":

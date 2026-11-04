@@ -2,7 +2,7 @@
 Statistical overview: branch numbers, diffusion, attack vulnerability summary.
 """
 
-from poseidon.matrices import MATRIX_NAMES, branch_number
+from poseidon.matrices import get_matrix_set, branch_number
 from poseidon.permutation import PoseidonPermutation
 from poseidon.field import Fp
 from .diffusion import track_diffusion
@@ -20,7 +20,7 @@ def compute_stats(t: int = 3, r_p: int = 6, alpha: int = 5, delta_val: int = 4) 
     }
     """
     stats = {}
-    for name, M in MATRIX_NAMES.items():
+    for name, M in get_matrix_set(t).items():
         bn = branch_number(M)
         is_mds = bn >= t + 1
 

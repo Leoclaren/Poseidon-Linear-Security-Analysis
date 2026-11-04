@@ -7,7 +7,7 @@ Round structure:
 """
 
 from .field import Fp
-from .matrices import matrix_mul, MATRIX_NAMES, MDS_MATRIX
+from .matrices import matrix_mul, get_matrix_set
 from .constants import round_constants
 
 
@@ -40,13 +40,14 @@ class PoseidonPermutation:
         self.r_p = r_p
         self.alpha = alpha
 
-        self.full_matrix = full_matrix if full_matrix is not None else MDS_MATRIX
+        matrix_set = get_matrix_set(t)
+        self.full_matrix = full_matrix if full_matrix is not None else matrix_set["mds"]
         if partial_matrix is not None:
             self.partial_matrix = partial_matrix
-        elif matrix in MATRIX_NAMES:
-            self.partial_matrix = MATRIX_NAMES[matrix]
+        elif matrix in matrix_set:
+            self.partial_matrix = matrix_set[matrix]
         else:
-            raise ValueError(f"Unknown matrix: {matrix}. Choose from {list(MATRIX_NAMES)}")
+            raise ValueError(f"Unknown matrix: {matrix}. Choose from {list(matrix_set)}")
 
         self.matrix_name = matrix
         self.constants = round_constants(t, r_f, r_p)

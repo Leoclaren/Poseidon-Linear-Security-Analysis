@@ -18,7 +18,7 @@ provides a step-by-step proof transcript.
 """
 
 from poseidon.field import Fp
-from poseidon.matrices import matrix_mul, branch_number, MATRIX_NAMES
+from poseidon.matrices import matrix_mul, branch_number, get_matrix_set
 from poseidon.permutation import PoseidonPermutation
 
 
@@ -40,10 +40,17 @@ class SecurityProver:
     used in Poseidon1 partial rounds.
     """
 
-    def __init__(self, t: int = 3, matrix: str = "mds"):
+    def __init__(self, t: int = 3, matrix: str = "mds", matrix_override=None):
+        """
+        matrix_override: if given, use this t x t matrix directly instead
+        of looking `matrix` up in get_matrix_set(t) -- lets this prover run
+        against NUMS-generated candidates (poseidon.matrix_search) for an
+        independent, axis-aligned-only cross-check of Algorithm 1 / GRS21's
+        general eigenspace-based conclusion (RESEARCH_PLAN.md Step 4).
+        """
         self.t = t
         self.matrix_name = matrix
-        self.M = MATRIX_NAMES[matrix]
+        self.M = matrix_override if matrix_override is not None else get_matrix_set(t)[matrix]
 
     def _basis_vector(self, i: int) -> list:
         return [Fp(1) if j == i else Fp(0) for j in range(self.t)]
