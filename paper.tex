@@ -205,39 +205,81 @@ Jo's construction yields a matrix that our strongest structural
 certificate (\S\ref{sec:criterion}) reports fully secure.
 
 \subsection{Contributions}
+We state our contributions in three tiers of novelty rather than as one
+undifferentiated list, since several components of this paper implement
+or validate ideas proposed, but not built or tested, by others. Claiming
+otherwise would misattribute prior work; we would rather a reviewer see
+the distinction stated plainly than discover it themselves.
+
+\paragraph{Tier 1 -- results we believe are genuinely new.}
 \begin{enumerate}[leftmargin=1.3em]
-  \item \textbf{A unified structural criterion}
-  (\S\ref{sec:criterion}) generalizing both the GRS21
-  invariant-subspace check~\cite{weaklayers2020} and the
-  tensor-eigenvector mechanism of~\cite{cryptoeprint:2026/306} into two
-  field-generic algorithms, together covering every known
-  \emph{static}-structure attack on Poseidon's linear layer, with an
-  explicit, empirically demonstrated statement of what this class of
-  certificate cannot see.
-  \item \textbf{A single generation-order countermeasure}
-  (\S\ref{sec:countermeasure}) -- cryptographically binding the round
-  constants to a canonical encoding of \emph{both} linear layers before
-  either is used -- that removes, by construction, the precondition all
-  three attacks above require, at zero R1CS cost.
   \item \textbf{The first independent replication of Jo's full-round
-  collision} (\S\ref{sec:midpoint-reset}) and \textbf{the first
-  empirical validation of a proposed countermeasure against it}: across
-  nine independent trials (two matrix families, two toy fields, five
-  seeds), zero instances of our binding being defeated.
-  \item \textbf{A lightweight instantiation and exhaustive validation}
-  (\S\ref{sec:lightweight}--\S\ref{sec:battery}): a KoalaBear parameter
-  set cross-validated against a production reference implementation
-  (\texttt{circomlib}), a real Groth16 pipeline, and an eight-point
-  adversarial falsification battery, together with a real-world audit of
-  three independent, non-author-generated Poseidon deployments.
-  \item \textbf{Five honestly reported negative results}
-  (\S\ref{sec:levers}): design levers we tested and found did not
-  improve security, cost, or both.
-  \item \textbf{An explicit scope boundary} (\S\ref{sec:discussion}):
-  two further 2026 attack classes that remain open, confirmed as open by
-  a full read of the field's most comprehensive survey, not merely by
-  our own prior gap.
+  collision} (\S\ref{sec:midpoint-reset}) \textbf{and the first empirical
+  test of whether the countermeasure Jo's own discussion names, but
+  neither builds nor tests, actually defeats it}: across nine independent
+  trials (two matrix families, two toy fields, five seeds), zero
+  instances of our binding being defeated. A full read of the most
+  comprehensive available survey~\cite{sok2026} confirms no existing
+  source analyzes Jo's attack beyond a one-sentence mention shared with
+  Vitto's -- this is, to our knowledge, the only component of this paper
+  that is unambiguously without prior treatment anywhere.
+  \item \textbf{A Kronecker-agnostic generalization of the
+  tensor-eigenvector check} (\S\ref{sec:criterion}, step (c) of
+  Algorithm~\ref{alg:criterion}): Merz and Rodr\'iguez Garc\'ia's own
+  finding~\cite{cryptoeprint:2026/306} is specific to a known Kronecker
+  structure; our certificate independently rediscovers the identical
+  vulnerable/safe distinction on the real $16\times16$ matrices
+  \emph{without being given any tensor structure as input}, and we use
+  it, unprompted, to find the same vulnerable factor order present in
+  Plonky3's production code (\S\ref{sec:audit}).
+  \item \textbf{Two concrete, previously undocumented real-world
+  findings} (\S\ref{sec:audit}): \texttt{arkworks-rs}'s parameter
+  generator asserts three well-formedness checks in source comments with
+  zero corresponding code, and Plonky3's external matrix uses the
+  mechanism's vulnerable factor order in an actively used STARK proving
+  stack. Neither is a demonstrated break of a deployed instance; both
+  are, as far as we are aware, newly documented.
+  \item \textbf{Tensor-structuring the full-round matrix as an
+  efficiency lever, not only a security fix} (\S\ref{sec:lightweight}):
+  applying the safe Kronecker order to $M_{\mathrm{full}}$ (not just
+  $M_I$) yields a measured $73\%$ reduction in real multiplicative
+  complexity at $t=16$ -- a combination of the published security fix
+  with an efficiency argument we did not find reported elsewhere.
 \end{enumerate}
+
+\paragraph{Tier 2 -- correct, validated engineering, built on others'
+ideas.} \textbf{The generation-order countermeasure of
+\S\ref{sec:countermeasure} is not our idea}: Vitto's~\cite{slipway2026}
+\S6.3 and Jo's~\cite{jo2026} discussion both name binding round
+constants to a canonical encoding of the matrix as the natural fix for
+their respective attacks, and neither builds or tests it. Our
+contribution is constructing it correctly (including finding and closing
+a real gap, where an earlier version bound only $M_I$ and left
+Vitto's actual target, $M_{\mathrm{full}}$, unbound) and being the first
+to test it against Jo's strictly stronger attack (Tier 1, item 1).
+Likewise, the GRS21 invariant-subspace criterion~\cite{weaklayers2020}
+(Algorithm~\ref{alg:criterion}, steps (a)/(a-fast)/(b)) is 2020/2021
+prior work; our contribution is a field-generic, independently validated
+implementation, not a new criterion. The lightweight KoalaBear
+instantiation, its cross-validation against \texttt{circomlib} and a
+real Groth16 pipeline, and the eight-point exhaustive battery
+(\S\ref{sec:lightweight}--\S\ref{sec:battery}) are rigorous validation
+work establishing that our combination of known-good components behaves
+as claimed; they are due diligence in support of the Tier 1 results, not
+independent discoveries.
+
+\paragraph{Tier 3 -- negative results, reported for completeness.}
+\textbf{Five design levers we tested and found did not help}
+(\S\ref{sec:levers}): lowering the S-box exponent, rotating the active
+S-box coordinate, two tricks imported from GMiMCHash2, and a naive
+lookup-hybrid degree model. None of these are contributions in the usual
+sense -- we report them so the next attempt does not repeat the same
+dead ends.
+
+Finally, \textbf{an explicit scope boundary} (\S\ref{sec:discussion}):
+two further 2026 attack classes remain open, confirmed as open by a full
+read of the field's most comprehensive survey, not merely by our own
+prior gap.
 
 \section{Background}
 \label{sec:background}
